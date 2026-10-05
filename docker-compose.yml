@@ -1,0 +1,15 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: clinica-frontend:1.0
+    container_name: clinica_frontend
+    ports:
+      - "8091:8091"
+    restart: unless-stopped
+    networks:
+      - dev1_network
+networks:
+  dev1_network:
+    external: true
