@@ -7,7 +7,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
           <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2" />
         </svg>
       </span>
-      {!compact && <span>Clínica<span className="brand-light">Care</span></span>}
+      {!compact && <span>Diana<span className="brand-light">Libreros</span></span>}
     </div>
   )
 }

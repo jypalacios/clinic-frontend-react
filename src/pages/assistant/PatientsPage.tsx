@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { apiRequest } from '../../api/client'
 import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
@@ -16,6 +16,29 @@ interface PatientRecord {
   direccion?: string
   eps?: string
   contacto_emergencia?: string
+}
+
+interface PatientCSVPreviewRow {
+  row_number: number
+  patient: PatientRecord
+}
+
+interface PatientCSVRowError {
+  row_number: number
+  messages: string[]
+}
+
+interface PatientCSVPreview {
+  total_rows: number
+  valid_rows: number
+  invalid_rows: number
+  can_import: boolean
+  preview_rows: PatientCSVPreviewRow[]
+  errors: PatientCSVRowError[]
+}
+
+interface PatientCSVImportResult {
+  imported_rows: number
 }
 
 interface SexoRecord {
@@ -49,6 +72,8 @@ const initialForm: PatientFormState = {
   contacto_emergencia: '',
 }
 
+const patientCSVTemplate = 'cedula,nombres,apellidos,fecha_nacimiento,sexo,telefono,email,direccion,eps,contacto_emergencia'
+
 export function PatientsPage() {
   const { hasPermission } = useAuth()
   const canManagePatients = hasPermission('patients.manage')
@@ -56,6 +81,12 @@ export function PatientsPage() {
   const sexos = useResource<SexoRecord[]>('/sexos/', canManagePatients)
   const [form, setForm] = useState<PatientFormState>(initialForm)
   const [formOpen, setFormOpen] = useState(false)
+  const [csvImportOpen, setCsvImportOpen] = useState(false)
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [csvPreview, setCsvPreview] = useState<PatientCSVPreview | null>(null)
+  const [csvSubmitting, setCsvSubmitting] = useState(false)
+  const [csvError, setCsvError] = useState<string | null>(null)
+  const csvInputRef = useRef<HTMLInputElement | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -70,6 +101,71 @@ export function PatientsPage() {
     setForm(initialForm)
     setSubmitError(null)
     setFormOpen(false)
+  }
+
+  function downloadCSVTemplate() {
+    const blob = new Blob([`\uFEFF${patientCSVTemplate}\r\n`], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'plantilla_pacientes.csv'
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+
+  function closeCSVImport() {
+    setCsvImportOpen(false)
+    setCsvFile(null)
+    setCsvPreview(null)
+    setCsvError(null)
+    if (csvInputRef.current) csvInputRef.current.value = ''
+  }
+
+  async function previewCSVImport() {
+    if (!csvFile) {
+      setCsvError('Seleccione un archivo CSV antes de validarlo.')
+      return
+    }
+    setCsvSubmitting(true)
+    setCsvError(null)
+    setCsvPreview(null)
+    const body = new FormData()
+    body.append('file', csvFile)
+    try {
+      const result = await apiRequest<PatientCSVPreview>('/patients/import/preview', {
+        method: 'POST',
+        body,
+      })
+      setCsvPreview(result)
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : 'No fue posible validar el archivo CSV.')
+    } finally {
+      setCsvSubmitting(false)
+    }
+  }
+
+  async function importCSVPatients() {
+    if (!csvFile || !csvPreview?.can_import) return
+    setCsvSubmitting(true)
+    setCsvError(null)
+    const body = new FormData()
+    body.append('file', csvFile)
+    try {
+      const result = await apiRequest<PatientCSVImportResult>('/patients/import', {
+        method: 'POST',
+        body,
+      })
+      setSuccessMessage(`${result.imported_rows} pacientes importados correctamente.`)
+      closeCSVImport()
+      resource.reload()
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : 'No fue posible importar los pacientes.')
+      setCsvPreview(null)
+    } finally {
+      setCsvSubmitting(false)
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -123,20 +219,41 @@ export function PatientsPage() {
         ]}
         emptyMessage="No hay pacientes registrados."
         headerAction={canManagePatients ? (
-          <button
-            className="button button-primary"
-            type="button"
-            aria-expanded={formOpen}
-            aria-controls="patient-create-form"
-            onClick={() => {
-              setFormOpen((open) => !open)
-              setSubmitError(null)
-              setSuccessMessage(null)
-            }}
-          >
-            <span aria-hidden="true">{formOpen ? '−' : '+'}</span>
-            {formOpen ? 'Cancelar alta' : 'Nuevo paciente'}
-          </button>
+          <>
+            <button
+              className="button button-secondary"
+              type="button"
+              aria-expanded={csvImportOpen}
+              disabled={csvSubmitting}
+              onClick={() => {
+                if (csvImportOpen) closeCSVImport()
+                else {
+                  closeForm()
+                  setCsvImportOpen(true)
+                  setCsvError(null)
+                }
+                setSuccessMessage(null)
+              }}
+            >
+              {csvImportOpen ? 'Cancelar importación' : 'Importar CSV'}
+            </button>
+            <button
+              className="button button-primary"
+              type="button"
+              aria-expanded={formOpen}
+              aria-controls="patient-create-form"
+              disabled={csvSubmitting}
+              onClick={() => {
+                if (!formOpen) closeCSVImport()
+                setFormOpen((open) => !open)
+                setSubmitError(null)
+                setSuccessMessage(null)
+              }}
+            >
+              <span aria-hidden="true">{formOpen ? '−' : '+'}</span>
+              {formOpen ? 'Cancelar alta' : 'Nuevo paciente'}
+            </button>
+          </>
         ) : undefined}
       />
 
@@ -144,6 +261,106 @@ export function PatientsPage() {
         <div className="notice notice-success patient-feedback" role="status">
           <strong>Registro completado.</strong>
           <span>{successMessage}</span>
+        </div>
+      )}
+
+      {canManagePatients && csvImportOpen && (
+        <div className="panel user-form-panel patient-form-panel">
+          <div className="user-form-header">
+            <div>
+              <span className="eyebrow">CARGA MASIVA</span>
+              <h2>Importar pacientes desde CSV</h2>
+              <p>Use un CSV UTF-8 de hasta 5 MB y 5.000 filas. No se importará ningún registro si hay errores.</p>
+            </div>
+          </div>
+
+          <div className="notice notice-warning" role="note">
+            <span>La identificación debe ser única. Los pacientes existentes no se actualizan; corrija duplicados antes de confirmar.</span>
+          </div>
+
+          <div className="user-form">
+            <div className="field">
+              <label htmlFor="patient-csv-file">Archivo CSV</label>
+              <input
+                ref={csvInputRef}
+                id="patient-csv-file"
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(event) => {
+                  setCsvFile(event.target.files?.[0] ?? null)
+                  setCsvPreview(null)
+                  setCsvError(null)
+                }}
+                disabled={csvSubmitting}
+              />
+              <small>Columnas requeridas: cedula, nombres, apellidos, fecha_nacimiento (AAAA-MM-DD) y sexo. El sexo debe coincidir con el catálogo.</small>
+            </div>
+
+            {csvError && <div className="notice notice-error" role="alert"><strong>No se pudo procesar el CSV.</strong><span>{csvError}</span></div>}
+
+            {csvPreview && (
+              <div className="patient-csv-preview" aria-live="polite">
+                <div className={csvPreview.can_import ? 'notice notice-success' : 'notice notice-error'}>
+                  <strong>Validación completada.</strong>
+                  <span>{csvPreview.valid_rows} válidos, {csvPreview.invalid_rows} con errores, de {csvPreview.total_rows} filas.</span>
+                  {csvPreview.valid_rows > csvPreview.preview_rows.length && (
+                    <span>Se muestran las primeras {csvPreview.preview_rows.length} filas válidas.</span>
+                  )}
+                </div>
+
+                {csvPreview.preview_rows.length > 0 && (
+                  <div className="table-scroll">
+                    <table>
+                      <thead>
+                        <tr><th>Fila</th><th>Identificación</th><th>Nombre</th><th>Fecha de nacimiento</th><th>Sexo</th></tr>
+                      </thead>
+                      <tbody>
+                        {csvPreview.preview_rows.map(({ row_number, patient }) => (
+                          <tr key={row_number}>
+                            <td>{row_number}</td>
+                            <td>{patient.ced_patients}</td>
+                            <td>{patient.nom_patients} {patient.ape_patients}</td>
+                            <td>{patient.fec_nacimiento}</td>
+                            <td>{sexos.data?.find((sexo) => sexo.id_sexo === patient.id_sexo)?.nom_sexo ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {csvPreview.errors.length > 0 && (
+                  <div className="patient-csv-errors">
+                    <strong>Corrija estos errores y vuelva a cargar el archivo:</strong>
+                    <ul>
+                      {csvPreview.errors.map((rowError) => (
+                        <li key={rowError.row_number}>
+                          <strong>Fila {rowError.row_number}:</strong> {rowError.messages.join('; ')}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="user-form-actions">
+              <button className="button button-secondary" type="button" onClick={downloadCSVTemplate}>
+                Descargar plantilla
+              </button>
+              <button className="button button-secondary" type="button" onClick={previewCSVImport} disabled={csvSubmitting || !csvFile}>
+                {csvSubmitting && !csvPreview ? 'Validando…' : 'Validar archivo'}
+              </button>
+              {csvPreview?.can_import && (
+                <button className="button button-primary" type="button" onClick={importCSVPatients} disabled={csvSubmitting}>
+                  {csvSubmitting ? 'Importando…' : `Confirmar e importar ${csvPreview.valid_rows} pacientes`}
+                </button>
+              )}
+              <button className="button button-secondary" type="button" onClick={closeCSVImport} disabled={csvSubmitting}>
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
