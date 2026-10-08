@@ -7,6 +7,8 @@ import { useAuth } from '../../auth/AuthContext'
 interface PatientRecord {
   id_patients?: number
   ced_patients?: string
+  id_documents?: number
+  document?: DocumentRecord
   nom_patients?: string
   ape_patients?: string
   fec_nacimiento?: string
@@ -46,8 +48,15 @@ interface SexoRecord {
   nom_sexo: string
 }
 
+interface DocumentRecord {
+  id_documents: number
+  desc_tipo: string
+  desc_documents: string
+}
+
 interface PatientFormState {
   ced_patients: string
+  id_documents: string
   nom_patients: string
   ape_patients: string
   fec_nacimiento: string
@@ -61,6 +70,7 @@ interface PatientFormState {
 
 const initialForm: PatientFormState = {
   ced_patients: '',
+  id_documents: '',
   nom_patients: '',
   ape_patients: '',
   fec_nacimiento: '',
@@ -72,13 +82,14 @@ const initialForm: PatientFormState = {
   contacto_emergencia: '',
 }
 
-const patientCSVTemplate = 'cedula,nombres,apellidos,fecha_nacimiento,sexo,telefono,email,direccion,eps,contacto_emergencia'
+const patientCSVTemplate = 'tipo_documento,cedula,nombres,apellidos,fecha_nacimiento,sexo,telefono,email,direccion,eps,contacto_emergencia'
 
 export function PatientsPage() {
   const { hasPermission } = useAuth()
   const canManagePatients = hasPermission('patients.manage')
   const resource = useResource<PatientRecord[] | { items?: PatientRecord[] }>('/patients/')
   const sexos = useResource<SexoRecord[]>('/sexos/', canManagePatients)
+  const documents = useResource<DocumentRecord[]>('/documents/', canManagePatients)
   const [form, setForm] = useState<PatientFormState>(initialForm)
   const [formOpen, setFormOpen] = useState(false)
   const [csvImportOpen, setCsvImportOpen] = useState(false)
@@ -176,6 +187,7 @@ export function PatientsPage() {
 
     const payload = {
       ced_patients: form.ced_patients.trim(),
+      id_documents: Number(form.id_documents),
       nom_patients: form.nom_patients.trim(),
       ape_patients: form.ape_patients.trim(),
       fec_nacimiento: form.fec_nacimiento,
@@ -209,7 +221,12 @@ export function PatientsPage() {
         description="Consulta y gestiona la información de los pacientes registrados."
         resource={resource}
         columns={[
-          { key: 'ced_patients', label: 'Identificación' },
+          {
+            key: 'document',
+            label: 'Tipo de documento',
+            render: (value) => (value as DocumentRecord | undefined)?.desc_tipo ?? '—',
+          },
+          { key: 'ced_patients', label: 'Número de identificación' },
           { key: 'nom_patients', label: 'Nombre' },
           { key: 'ape_patients', label: 'Apellido' },
           { key: 'fec_nacimiento', label: 'Fecha de nacimiento' },
@@ -293,7 +310,7 @@ export function PatientsPage() {
                 }}
                 disabled={csvSubmitting}
               />
-              <small>Columnas requeridas: cedula, nombres, apellidos, fecha_nacimiento (AAAA-MM-DD) y sexo. El sexo debe coincidir con el catálogo.</small>
+              <small>Columnas requeridas: tipo_documento (código o nombre del catálogo), cedula, nombres, apellidos, fecha_nacimiento (AAAA-MM-DD) y sexo. Los tipos de documento y el sexo deben coincidir con sus catálogos.</small>
             </div>
 
             {csvError && <div className="notice notice-error" role="alert"><strong>No se pudo procesar el CSV.</strong><span>{csvError}</span></div>}
@@ -312,12 +329,13 @@ export function PatientsPage() {
                   <div className="table-scroll">
                     <table>
                       <thead>
-                        <tr><th>Fila</th><th>Identificación</th><th>Nombre</th><th>Fecha de nacimiento</th><th>Sexo</th></tr>
+                        <tr><th>Fila</th><th>Tipo de documento</th><th>Número</th><th>Nombre</th><th>Fecha de nacimiento</th><th>Sexo</th></tr>
                       </thead>
                       <tbody>
                         {csvPreview.preview_rows.map(({ row_number, patient }) => (
                           <tr key={row_number}>
                             <td>{row_number}</td>
+                            <td>{documents.data?.find((document) => document.id_documents === patient.id_documents)?.desc_tipo ?? '—'}</td>
                             <td>{patient.ced_patients}</td>
                             <td>{patient.nom_patients} {patient.ape_patients}</td>
                             <td>{patient.fec_nacimiento}</td>
@@ -381,10 +399,25 @@ export function PatientsPage() {
             </div>
           )}
 
+          {documents.error && (
+            <div className="notice notice-error" role="alert">
+              <strong>No se pudieron cargar los tipos de documento.</strong>
+              <span>{documents.error}</span>
+              <button className="text-button" type="button" onClick={documents.reload}>Intentar de nuevo</button>
+            </div>
+          )}
+
           <form className="user-form" onSubmit={handleSubmit}>
             <div className="user-form-grid">
               <div className="field">
-                <label htmlFor="patient-cedula">Identificación</label>
+                <label htmlFor="patient-document-type">Tipo de documento</label>
+                <select id="patient-document-type" name="id_documents" value={form.id_documents} onChange={(event) => updateField('id_documents', event.target.value)} required disabled={documents.loading || Boolean(documents.error) || !documents.data?.length}>
+                  <option value="">Seleccione una opción</option>
+                  {documents.data?.map((document) => <option key={document.id_documents} value={document.id_documents}>{document.desc_tipo} — {document.desc_documents}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="patient-cedula">Número de identificación</label>
                 <input id="patient-cedula" name="ced_patients" value={form.ced_patients} onChange={(event) => updateField('ced_patients', event.target.value)} required />
               </div>
               <div className="field">
@@ -441,8 +474,14 @@ export function PatientsPage() {
               </div>
             )}
 
+            {!documents.loading && !documents.error && !documents.data?.length && (
+              <div className="notice notice-warning" role="alert">
+                No hay tipos de documento configurados; no es posible completar el alta.
+              </div>
+            )}
+
             <div className="user-form-actions">
-              <button className="button button-primary" type="submit" disabled={submitting || sexos.loading || Boolean(sexos.error) || !sexos.data?.length}>
+              <button className="button button-primary" type="submit" disabled={submitting || sexos.loading || Boolean(sexos.error) || !sexos.data?.length || documents.loading || Boolean(documents.error) || !documents.data?.length}>
                 {submitting ? 'Registrando…' : 'Registrar paciente'}
               </button>
               <button className="button button-secondary" type="button" onClick={closeForm} disabled={submitting}>Cancelar</button>

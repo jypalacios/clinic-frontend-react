@@ -1,4 +1,6 @@
 FROM node:22-alpine AS build
+ARG APP_VERSION=1.0.0
+ENV VITE_APP_VERSION=$APP_VERSION
 # Directorio de trabajo dentro del contenedor; Docker lo crea automáticamente.
 WORKDIR /app
 COPY package*.json ./

@@ -24,7 +24,7 @@ export function DashboardPage() {
   const patients = useResource<unknown>('/patients/', canViewPatients)
   const doctors = useResource<unknown>('/doctors/', canViewDoctors)
   const appointments = useResource<unknown>('/appointments/', canViewAppointments)
-  const name = user?.nombre || user?.usuario || 'Equipo clínico'
+  const name = user?.nombre || user?.apellido || 'Equipo clínico'
   const hasErrors = (canViewPatients && patients.error) || (canViewDoctors && doctors.error) || (canViewAppointments && appointments.error)
   const quickLinks = [
     canViewPatients && { to: '/assistant/patients', icon: '♧', title: 'Pacientes', text: 'Consulta y gestiona pacientes.' },
@@ -70,7 +70,7 @@ export function DashboardPage() {
         </div>
         <div className="panel care-panel">
           <div className="care-icon">✦</div>
-          <span className="eyebrow">CLÍNICA CARE</span>
+          <span className="eyebrow">CLÍNICA SOFTWARE</span>
           <h2>Una atención que conecta</h2>
           <p>Organiza la información y acompaña cada etapa del cuidado de tus pacientes.</p>
           <div className="care-line"><span>Tu equipo clínico, más cerca</span><span aria-hidden="true">→</span></div>

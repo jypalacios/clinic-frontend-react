@@ -3,7 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: clinica-frontend:1.0
+      args:
+        APP_VERSION: ${APP_VERSION:-1.0.0}
+    image: clinica-frontend:${APP_VERSION:-1.0.0}
     container_name: clinica_frontend
     ports:
       - "8091:8091"

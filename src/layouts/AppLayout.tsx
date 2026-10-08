@@ -23,6 +23,7 @@ const roleLabels: Record<string, string> = {
 
 export function AppLayout() {
   const { user, role, hasPermission, logout } = useAuth()
+  const appVersion = import.meta.env.VITE_APP_VERSION || '1.0.0'
   const fullName = [user?.nombre, user?.apellido].filter(Boolean).join(' ') || user?.usuario || user?.email || 'Usuario'
   const displayRole = role === 'unknown' ? String(user?.role ?? user?.nom_role ?? 'Usuario') : roleLabels[role]
 
@@ -47,14 +48,14 @@ export function AppLayout() {
           <div className="help-card">
             <span className="help-bubble">?</span>
             <strong>¿Necesitas ayuda?</strong>
-            <span>Contacta al administrador de tu clínica.</span>
+            <span>Contacta al administrador.</span>
           </div>
-          <span className="sidebar-version">ClínicaCare · Gestión clínica</span>
+          <span className="sidebar-version">Clínica Software · v{appVersion}</span>
         </div>
       </aside>
       <main className="main-area">
         <header className="topbar">
-          <div className="breadcrumb"><span>ClínicaCare</span><span>/</span><strong>Panel de gestión</strong></div>
+          <div className="breadcrumb"><span>Clínica Software</span><span>/</span><strong>Panel de gestión</strong></div>
           <div className="topbar-user">
             <div className="user-avatar">{fullName.slice(0, 1).toUpperCase()}</div>
             <div className="user-info"><strong>{fullName}</strong><span>{displayRole}</span></div>
