@@ -11,6 +11,7 @@ interface ResourceTableProps<T> {
   emptyMessage?: string
   actions?: (row: Row) => ReactNode
   headerAction?: ReactNode
+  pageSize?: number
 }
 
 function rowsFrom<T>(value: T | null): Row[] {
@@ -38,14 +39,21 @@ export function ResourceTable<T>({
   emptyMessage = 'No hay registros disponibles.',
   actions,
   headerAction,
+  pageSize,
 }: ResourceTableProps<T>) {
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
   const rows = useMemo(() => rowsFrom(resource.data), [resource.data])
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return rows
     return rows.filter((row) => Object.values(row).some((value) => displayValue(value).toLowerCase().includes(query)))
   }, [rows, search])
+  const pageCount = pageSize ? Math.max(1, Math.ceil(filteredRows.length / pageSize)) : 1
+  const currentPage = Math.min(page, pageCount)
+  const visibleRows = pageSize
+    ? filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+    : filteredRows
 
   return (
     <section>
@@ -65,7 +73,7 @@ export function ResourceTable<T>({
       <div className="panel">
         <div className="table-toolbar">
           <div>
-            <strong>{rows.length}</strong>
+            <strong>{filteredRows.length}</strong>
             <span className="muted"> registros</span>
           </div>
           <label className="search-box">
@@ -74,7 +82,10 @@ export function ResourceTable<T>({
               type="search"
               placeholder="Buscar en los registros"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value)
+                setPage(1)
+              }}
             />
           </label>
         </div>
@@ -86,7 +97,7 @@ export function ResourceTable<T>({
           </div>
         ) : resource.loading ? (
           <div className="table-loading">Cargando registros…</div>
-        ) : filteredRows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <div className="empty-state">
             <span className="empty-icon" aria-hidden="true">⌕</span>
             <strong>{search ? 'Sin resultados' : emptyMessage}</strong>
@@ -102,7 +113,7 @@ export function ResourceTable<T>({
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((row, index) => (
+                {visibleRows.map((row, index) => (
                   <tr key={String(row.id ?? row.id_role ?? row.id_patients ?? row.id_doctors ?? row.id_appointments ?? index)}>
                     {columns.map((column) => (
                       <td key={column.key}>{column.render ? column.render(row[column.key], row) : displayValue(row[column.key])}</td>
@@ -112,6 +123,34 @@ export function ResourceTable<T>({
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {pageSize && filteredRows.length > 0 && (
+          <div className="table-pagination" aria-label="Paginación de resultados">
+            <span>
+              Mostrando {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredRows.length)} de {filteredRows.length}
+            </span>
+            <div>
+              <button
+                className="button button-secondary"
+                type="button"
+                aria-label="Página anterior"
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                disabled={currentPage === 1}
+              >
+                Anterior
+              </button>
+              <span>Página {currentPage} de {pageCount}</span>
+              <button
+                className="button button-secondary"
+                type="button"
+                aria-label="Página siguiente"
+                onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+                disabled={currentPage === pageCount}
+              >
+                Siguiente
+              </button>
+            </div>
           </div>
         )}
       </div>

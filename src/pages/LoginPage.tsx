@@ -63,9 +63,10 @@ export function LoginPage() {
             {submitting ? 'Validando acceso…' : 'Iniciar sesión'} <span aria-hidden="true">→</span>
           </button>
         </form>
+        <div className="version-info"><span>Version {import.meta.env.VITE_APP_VERSION || '1.0.0'}</span></div>
         <div className="login-security"><span aria-hidden="true">▣</span> Acceso seguro para el personal autorizado</div>
       </section>
-      <footer className="login-footer">© {new Date().getFullYear()} ClínicaCare · Plataforma de gestión clínica</footer>
+      <footer className="login-footer">© {new Date().getFullYear()} Clínica Software · Plataforma de gestión clínica</footer>
     </main>
   )
 }

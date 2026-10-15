@@ -12,12 +12,19 @@ interface PatientRecord {
   nom_patients?: string
   ape_patients?: string
   fec_nacimiento?: string
+  edad?: number
   id_sexo?: number
+  nom_sexo?: string
+  activo?: boolean | 0 | 1
   telefono?: string
   email?: string
   direccion?: string
   eps?: string
   contacto_emergencia?: string
+}
+
+interface EditablePatientRecord extends PatientRecord {
+  id_patients: number
 }
 
 interface PatientCSVPreviewRow {
@@ -84,6 +91,34 @@ const initialForm: PatientFormState = {
 
 const patientCSVTemplate = 'tipo_documento,cedula,nombres,apellidos,fecha_nacimiento,sexo,telefono,email,direccion,eps,contacto_emergencia'
 
+function editablePatientFromRow(row: Record<string, unknown>): EditablePatientRecord | null {
+  if (
+    typeof row.id_patients !== 'number' ||
+    !Number.isInteger(row.id_patients) ||
+    typeof row.ced_patients !== 'string' ||
+    typeof row.id_documents !== 'number' ||
+    typeof row.nom_patients !== 'string' ||
+    typeof row.ape_patients !== 'string' ||
+    typeof row.fec_nacimiento !== 'string' ||
+    typeof row.id_sexo !== 'number'
+  ) return null
+
+  return {
+    id_patients: row.id_patients,
+    ced_patients: row.ced_patients,
+    id_documents: row.id_documents,
+    nom_patients: row.nom_patients,
+    ape_patients: row.ape_patients,
+    fec_nacimiento: row.fec_nacimiento,
+    id_sexo: row.id_sexo,
+    telefono: typeof row.telefono === 'string' ? row.telefono : '',
+    email: typeof row.email === 'string' ? row.email : '',
+    direccion: typeof row.direccion === 'string' ? row.direccion : '',
+    eps: typeof row.eps === 'string' ? row.eps : '',
+    contacto_emergencia: typeof row.contacto_emergencia === 'string' ? row.contacto_emergencia : '',
+  }
+}
+
 export function PatientsPage() {
   const { hasPermission } = useAuth()
   const canManagePatients = hasPermission('patients.manage')
@@ -91,6 +126,7 @@ export function PatientsPage() {
   const sexos = useResource<SexoRecord[]>('/sexos/', canManagePatients)
   const documents = useResource<DocumentRecord[]>('/documents/', canManagePatients)
   const [form, setForm] = useState<PatientFormState>(initialForm)
+  const [editingPatient, setEditingPatient] = useState<EditablePatientRecord | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [csvImportOpen, setCsvImportOpen] = useState(false)
   const [csvFile, setCsvFile] = useState<File | null>(null)
@@ -110,8 +146,30 @@ export function PatientsPage() {
 
   function closeForm() {
     setForm(initialForm)
+    setEditingPatient(null)
     setSubmitError(null)
     setFormOpen(false)
+  }
+
+  function startEditingPatient(patient: EditablePatientRecord) {
+    setForm({
+      ced_patients: patient.ced_patients ?? '',
+      id_documents: String(patient.id_documents ?? ''),
+      nom_patients: patient.nom_patients ?? '',
+      ape_patients: patient.ape_patients ?? '',
+      fec_nacimiento: patient.fec_nacimiento ?? '',
+      id_sexo: String(patient.id_sexo ?? ''),
+      telefono: patient.telefono ?? '',
+      email: patient.email ?? '',
+      direccion: patient.direccion ?? '',
+      eps: patient.eps ?? '',
+      contacto_emergencia: patient.contacto_emergencia ?? '',
+    })
+    setEditingPatient(patient)
+    setFormOpen(true)
+    closeCSVImport()
+    setSubmitError(null)
+    setSuccessMessage(null)
   }
 
   function downloadCSVTemplate() {
@@ -200,15 +258,15 @@ export function PatientsPage() {
     }
 
     try {
-      await apiRequest<PatientRecord>('/patients/', {
-        method: 'POST',
+      await apiRequest<PatientRecord>(editingPatient ? `/patients/${editingPatient.id_patients}` : '/patients/', {
+        method: editingPatient ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
       })
-      setSuccessMessage('Paciente registrado correctamente.')
+      setSuccessMessage(editingPatient ? 'Paciente actualizado correctamente.' : 'Paciente registrado correctamente.')
       closeForm()
       resource.reload()
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'No fue posible registrar el paciente.')
+      setSubmitError(error instanceof Error ? error.message : 'No fue posible guardar el paciente.')
     } finally {
       setSubmitting(false)
     }
@@ -220,6 +278,7 @@ export function PatientsPage() {
         title="Pacientes"
         description="Consulta y gestiona la información de los pacientes registrados."
         resource={resource}
+        pageSize={10}
         columns={[
           {
             key: 'document',
@@ -230,10 +289,38 @@ export function PatientsPage() {
           { key: 'nom_patients', label: 'Nombre' },
           { key: 'ape_patients', label: 'Apellido' },
           { key: 'fec_nacimiento', label: 'Fecha de nacimiento' },
-          { key: 'id_sexo', label: 'Sexo' },
+          { key: 'edad', label: 'Edad' },
+          { key: 'nom_sexo', label: 'Sexo' },
           { key: 'telefono', label: 'Teléfono' },
+          { key: 'email', label: 'Correo electrónico' },
+          { key: 'direccion', label: 'Dirección' },
           { key: 'eps', label: 'EPS' },
+          { key: 'contacto_emergencia', label: 'Contacto de emergencia' },
+          {
+            key: 'activo',
+            label: 'Estado',
+            render: (value) => value === 0 || value === true
+              ? 'Activo'
+              : value === 1 || value === false
+                ? 'Inactivo'
+                : '—',
+          },
         ]}
+        actions={canManagePatients ? (row) => {
+          const patient = editablePatientFromRow(row)
+          if (!patient || patient.id_patients <= 0) return <span className="muted">Datos incompletos</span>
+          return (
+            <div className="table-actions">
+              <button
+                className="action-button action-button-edit"
+                type="button"
+                onClick={() => startEditingPatient(patient)}
+              >
+                Editar
+              </button>
+            </div>
+          )
+        } : undefined}
         emptyMessage="No hay pacientes registrados."
         headerAction={canManagePatients ? (
           <>
@@ -261,14 +348,18 @@ export function PatientsPage() {
               aria-controls="patient-create-form"
               disabled={csvSubmitting}
               onClick={() => {
-                if (!formOpen) closeCSVImport()
-                setFormOpen((open) => !open)
+                if (formOpen) closeForm()
+                else {
+                  closeCSVImport()
+                  setFormOpen(true)
+                  setEditingPatient(null)
+                }
                 setSubmitError(null)
                 setSuccessMessage(null)
               }}
             >
               <span aria-hidden="true">{formOpen ? '−' : '+'}</span>
-              {formOpen ? 'Cancelar alta' : 'Nuevo paciente'}
+              {formOpen ? (editingPatient ? 'Cancelar edición' : 'Cancelar alta') : 'Nuevo paciente'}
             </button>
           </>
         ) : undefined}
@@ -276,7 +367,7 @@ export function PatientsPage() {
 
       {successMessage && (
         <div className="notice notice-success patient-feedback" role="status">
-          <strong>Registro completado.</strong>
+          <strong>Paciente guardado.</strong>
           <span>{successMessage}</span>
         </div>
       )}
@@ -386,8 +477,8 @@ export function PatientsPage() {
         <div className="panel user-form-panel patient-form-panel" id="patient-create-form">
           <div className="user-form-header">
             <div>
-              <span className="eyebrow">ALTA DE PACIENTE</span>
-              <h2>Registrar nuevo paciente</h2>
+              <span className="eyebrow">{editingPatient ? 'EDICIÓN DE PACIENTE' : 'ALTA DE PACIENTE'}</span>
+              <h2>{editingPatient ? `Editar paciente #${editingPatient.id_patients}` : 'Registrar nuevo paciente'}</h2>
             </div>
           </div>
 
@@ -463,7 +554,7 @@ export function PatientsPage() {
 
             {submitError && (
               <div className="notice notice-error" role="alert">
-                <strong>No se pudo registrar el paciente.</strong>
+                <strong>No se pudo guardar el paciente.</strong>
                 <span>{submitError}</span>
               </div>
             )}
@@ -482,7 +573,7 @@ export function PatientsPage() {
 
             <div className="user-form-actions">
               <button className="button button-primary" type="submit" disabled={submitting || sexos.loading || Boolean(sexos.error) || !sexos.data?.length || documents.loading || Boolean(documents.error) || !documents.data?.length}>
-                {submitting ? 'Registrando…' : 'Registrar paciente'}
+                {submitting ? 'Guardando…' : editingPatient ? 'Guardar cambios' : 'Registrar paciente'}
               </button>
               <button className="button button-secondary" type="button" onClick={closeForm} disabled={submitting}>Cancelar</button>
             </div>
