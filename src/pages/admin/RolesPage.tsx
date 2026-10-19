@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react'
 import { apiRequest } from '../../api/client'
 import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
-import { permissionOptions } from '../../auth/permissions'
 
 interface RoleRecord {
   id_role: number
@@ -14,7 +13,17 @@ interface PermissionRecord {
   id_permiso: number
   nom_permiso: string
   permiso_key: string | null
+  etiqueta: string
+  nom_grupo: string
   activo: boolean
+}
+
+interface PermissionChoice {
+  key: string
+  ids: number[]
+  records: PermissionRecord[]
+  etiqueta: string
+  nom_grupo: string
 }
 
 interface RoleForm {
@@ -29,19 +38,20 @@ interface PermissionForm {
 
 const emptyRoleForm: RoleForm = { nom_role: '', permisos: [] }
 const emptyPermissionForm: PermissionForm = { nom_permiso: '', activo: true }
-const permissionLabels = new Map<string, string>(permissionOptions.map(({ key, label }) => [key, label]))
-const permissionGroups = new Map<string, string>(permissionOptions.map(({ key, group }) => [key, group]))
 
-function permissionLabel(permission: PermissionRecord): string {
-  return permission.permiso_key
-    ? permissionLabels.get(permission.permiso_key) ?? permission.nom_permiso
-    : permission.nom_permiso
-}
-
-function permissionGroup(permission: PermissionRecord): string {
-  return permission.permiso_key
-    ? permissionGroups.get(permission.permiso_key) ?? 'Otros permisos'
-    : 'Otros permisos'
+function groupPermissions(records: PermissionRecord[]): PermissionChoice[] {
+  return Object.values(records.reduce<Record<string, PermissionChoice>>((groups, permission) => {
+    const key = permission.permiso_key ?? `permission:${permission.id_permiso}`
+    const existing = groups[key]
+    groups[key] = {
+      key,
+      ids: [...(existing?.ids ?? []), permission.id_permiso],
+      records: [...(existing?.records ?? []), permission],
+      etiqueta: permission.etiqueta,
+      nom_grupo: permission.nom_grupo,
+    }
+    return groups
+  }, {}))
 }
 
 export function RolesPage() {
@@ -69,12 +79,13 @@ export function RolesPage() {
     setSuccess(null)
   }
 
-  function togglePermission(permissionId: number) {
+  function togglePermission(permissionIds: number[]) {
+    const selected = permissionIds.some((permissionId) => form.permisos.includes(permissionId))
     setForm((current) => ({
       ...current,
-      permisos: current.permisos.includes(permissionId)
-        ? current.permisos.filter((item) => item !== permissionId)
-        : [...current.permisos, permissionId],
+      permisos: selected
+        ? current.permisos.filter((permissionId) => !permissionIds.includes(permissionId))
+        : [...new Set([...current.permisos, ...permissionIds])],
     }))
     setError(null)
     setSuccess(null)
@@ -148,18 +159,23 @@ export function RolesPage() {
     }
   }
 
-  const activePermissions = (permissions.data ?? []).filter((permission) => permission.activo)
-  const groupedPermissions = activePermissions.reduce<Record<string, PermissionRecord[]>>((groups, permission) => {
-    const group = permissionGroup(permission)
-    groups[group] = [...(groups[group] ?? []), permission]
-    return groups
-  }, {})
+  const allPermissions = permissions.data ?? []
+  const activePermissions = allPermissions.filter((permission) => permission.activo)
+  const activePermissionChoices = groupPermissions(activePermissions)
+  const catalogPermissionChoices = groupPermissions(allPermissions)
+  const groupedPermissions = activePermissionChoices.reduce<Record<string, PermissionChoice[]>>(
+    (groups, permission) => {
+      groups[permission.nom_grupo] = [...(groups[permission.nom_grupo] ?? []), permission]
+      return groups
+    },
+    {},
+  )
 
   return (
     <section>
       <ResourceTable
         title="Roles y permisos"
-        description="Define los perfiles de acceso y los permisos persistidos en la matriz de roles."
+        description="Los permisos efectivos provienen de v_permisos_roles. Ajusta aquí las asignaciones activas del rol."
         resource={roles}
         columns={[
           { key: 'nom_role', label: 'Rol' },
@@ -168,9 +184,9 @@ export function RolesPage() {
             label: 'Permisos activos',
             render: (value) => {
               const ids = Array.isArray(value) ? value.map(Number) : []
-              const names = (permissions.data ?? [])
-                .filter((permission) => ids.includes(permission.id_permiso))
-                .map(permissionLabel)
+              const names = catalogPermissionChoices
+                .filter((permission) => permission.ids.some((id) => ids.includes(id)))
+                .map((permission) => permission.etiqueta)
               return names.join(', ') || 'Sin permisos'
             },
           },
@@ -196,7 +212,7 @@ export function RolesPage() {
         <div className="user-form-header">
           <span className="eyebrow">{editingRoleId === null ? 'NUEVO PERFIL' : 'EDICIÓN DE ROL'}</span>
           <h2>{editingRoleId === null ? 'Crear rol' : `Editar ${form.nom_role}`}</h2>
-          <p>Los cambios se guardan en roles y matriz_permisos mediante el backend.</p>
+          <p>Las asignaciones se guardan en matriz_permisos y se reflejan en v_permisos_roles.</p>
         </div>
         <form className="user-form" onSubmit={saveRole}>
           <div className="field">
@@ -225,13 +241,13 @@ export function RolesPage() {
                   <section className="role-permission-group" key={group}>
                     <h3>{group}</h3>
                     {items.map((permission) => (
-                      <label className="role-permission-option" key={permission.id_permiso}>
+                      <label className="role-permission-option" key={permission.key}>
                         <input
                           type="checkbox"
-                          checked={form.permisos.includes(permission.id_permiso)}
-                          onChange={() => togglePermission(permission.id_permiso)}
+                          checked={permission.ids.some((id) => form.permisos.includes(id))}
+                          onChange={() => togglePermission(permission.ids)}
                         />
-                        <span>{permissionLabel(permission)}</span>
+                        <span>{permission.etiqueta}</span>
                       </label>
                     ))}
                   </section>
@@ -301,14 +317,25 @@ export function RolesPage() {
               <tr><th>Permiso</th><th>Estado</th><th>Acciones</th></tr>
             </thead>
             <tbody>
-              {(permissions.data ?? []).map((permission) => (
-                <tr key={permission.id_permiso}>
-                  <td>{permissionLabel(permission)}</td>
-                  <td>{permission.activo ? 'Activo' : 'Inactivo'}</td>
+              {catalogPermissionChoices.map((permission) => (
+                <tr key={permission.key}>
+                  <td>{permission.etiqueta}</td>
+                  <td>
+                    {permission.records.filter((record) => record.activo).length} activos /{' '}
+                    {permission.records.filter((record) => !record.activo).length} inactivos
+                    <small>{permission.records.map((record) => record.nom_permiso).join(', ')}</small>
+                  </td>
                   <td className="actions-cell">
-                    <button type="button" className="action-button action-button-edit" onClick={() => editPermission(permission)}>
-                      Editar
-                    </button>
+                    {permission.records.map((record) => (
+                      <button
+                        key={record.id_permiso}
+                        type="button"
+                        className="action-button action-button-edit"
+                        onClick={() => editPermission(record)}
+                      >
+                        Editar {record.nom_permiso}
+                      </button>
+                    ))}
                   </td>
                 </tr>
               ))}

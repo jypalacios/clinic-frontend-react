@@ -121,10 +121,12 @@ function editablePatientFromRow(row: Record<string, unknown>): EditablePatientRe
 
 export function PatientsPage() {
   const { hasPermission } = useAuth()
-  const canManagePatients = hasPermission('patients.manage')
+  const canCreatePatients = hasPermission('patients.manage')
+  const canEditPatients = hasPermission('patients.edit')
+  const canEditPatientRecords = canCreatePatients || canEditPatients
   const resource = useResource<PatientRecord[] | { items?: PatientRecord[] }>('/patients/')
-  const sexos = useResource<SexoRecord[]>('/sexos/', canManagePatients)
-  const documents = useResource<DocumentRecord[]>('/documents/', canManagePatients)
+  const sexos = useResource<SexoRecord[]>('/sexos/', canEditPatientRecords)
+  const documents = useResource<DocumentRecord[]>('/documents/', canEditPatientRecords)
   const [form, setForm] = useState<PatientFormState>(initialForm)
   const [editingPatient, setEditingPatient] = useState<EditablePatientRecord | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -306,7 +308,7 @@ export function PatientsPage() {
                 : '—',
           },
         ]}
-        actions={canManagePatients ? (row) => {
+        actions={canEditPatients ? (row) => {
           const patient = editablePatientFromRow(row)
           if (!patient || patient.id_patients <= 0) return <span className="muted">Datos incompletos</span>
           return (
@@ -322,7 +324,7 @@ export function PatientsPage() {
           )
         } : undefined}
         emptyMessage="No hay pacientes registrados."
-        headerAction={canManagePatients ? (
+        headerAction={canCreatePatients ? (
           <>
             <button
               className="button button-secondary"
@@ -372,7 +374,7 @@ export function PatientsPage() {
         </div>
       )}
 
-      {canManagePatients && csvImportOpen && (
+      {canCreatePatients && csvImportOpen && (
         <div className="panel user-form-panel patient-form-panel">
           <div className="user-form-header">
             <div>
@@ -473,7 +475,7 @@ export function PatientsPage() {
         </div>
       )}
 
-      {canManagePatients && formOpen && (
+      {canEditPatientRecords && formOpen && (
         <div className="panel user-form-panel patient-form-panel" id="patient-create-form">
           <div className="user-form-header">
             <div>
