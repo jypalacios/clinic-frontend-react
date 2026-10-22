@@ -9,6 +9,7 @@ import { DoctorsPage } from '../pages/admin/DoctorsPage'
 import { AuditPage } from '../pages/admin/AuditPage'
 import { PatientsPage } from '../pages/assistant/PatientsPage'
 import { AppointmentsPage } from '../pages/assistant/AppointmentsPage'
+import { IngresoPage } from '../pages/assistant/IngresoPage'
 import { MyPatientsPage } from '../pages/doctor/MyPatientsPage'
 import { MedicalHistoryPage } from '../pages/doctor/MedicalHistoryPage'
 
@@ -36,6 +37,9 @@ export function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute permission="appointments.view" />}>
             <Route path="/assistant/appointments" element={<AppointmentsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission="appointments.manage" />}>
+            <Route path="/assistant/ingreso" element={<IngresoPage />} />
           </Route>
           <Route element={<ProtectedRoute permission="my_patients.view" />}>
             <Route path="/doctor/patients" element={<MyPatientsPage />} />

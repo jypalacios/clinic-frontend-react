@@ -21,6 +21,7 @@ interface PatientRecord {
   direccion?: string
   eps?: string
   contacto_emergencia?: string
+  discapacidad?: boolean | null
 }
 
 interface EditablePatientRecord extends PatientRecord {
@@ -73,6 +74,7 @@ interface PatientFormState {
   direccion: string
   eps: string
   contacto_emergencia: string
+  discapacidad: boolean
 }
 
 const initialForm: PatientFormState = {
@@ -87,6 +89,7 @@ const initialForm: PatientFormState = {
   direccion: '',
   eps: '',
   contacto_emergencia: '',
+  discapacidad: false,
 }
 
 const patientCSVTemplate = 'tipo_documento,cedula,nombres,apellidos,fecha_nacimiento,sexo,telefono,email,direccion,eps,contacto_emergencia'
@@ -116,6 +119,7 @@ function editablePatientFromRow(row: Record<string, unknown>): EditablePatientRe
     direccion: typeof row.direccion === 'string' ? row.direccion : '',
     eps: typeof row.eps === 'string' ? row.eps : '',
     contacto_emergencia: typeof row.contacto_emergencia === 'string' ? row.contacto_emergencia : '',
+    discapacidad: row.discapacidad === true,
   }
 }
 
@@ -140,7 +144,7 @@ export function PatientsPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  function updateField(field: keyof PatientFormState, value: string) {
+  function updateField(field: keyof PatientFormState, value: string | boolean) {
     setForm((current) => ({ ...current, [field]: value }))
     setSubmitError(null)
     setSuccessMessage(null)
@@ -166,6 +170,7 @@ export function PatientsPage() {
       direccion: patient.direccion ?? '',
       eps: patient.eps ?? '',
       contacto_emergencia: patient.contacto_emergencia ?? '',
+      discapacidad: patient.discapacidad === true,
     })
     setEditingPatient(patient)
     setFormOpen(true)
@@ -257,6 +262,7 @@ export function PatientsPage() {
       direccion: form.direccion.trim() || null,
       eps: form.eps.trim() || null,
       contacto_emergencia: form.contacto_emergencia.trim() || null,
+      discapacidad: form.discapacidad,
     }
 
     try {
@@ -292,6 +298,13 @@ export function PatientsPage() {
           { key: 'ape_patients', label: 'Apellido' },
           { key: 'fec_nacimiento', label: 'Fecha de nacimiento' },
           { key: 'edad', label: 'Edad' },
+          {
+            key: 'discapacidad',
+            label: 'Discapacidad',
+            render: (value) => value === true
+              ? <span className="priority-badge priority-high">Sí</span>
+              : 'No',
+          },
           { key: 'nom_sexo', label: 'Sexo' },
           { key: 'telefono', label: 'Teléfono' },
           { key: 'email', label: 'Correo electrónico' },
@@ -551,6 +564,12 @@ export function PatientsPage() {
               <div className="field">
                 <label htmlFor="patient-emergency-contact">Contacto de emergencia</label>
                 <input id="patient-emergency-contact" name="contacto_emergencia" value={form.contacto_emergencia} onChange={(event) => updateField('contacto_emergencia', event.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="patient-disability">
+                  <input id="patient-disability" name="discapacidad" type="checkbox" checked={form.discapacidad} onChange={(event) => updateField('discapacidad', event.target.checked)} />
+                  {' '}Discapacidad
+                </label>
               </div>
             </div>
 

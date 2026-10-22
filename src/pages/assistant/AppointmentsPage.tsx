@@ -9,7 +9,7 @@ interface AppointmentRecord {
   id_patients: number
   id_doctors: number
   fecha_hora: string
-  estado: string
+  nom_estado: string
 }
 
 interface PatientOption {
@@ -17,7 +17,8 @@ interface PatientOption {
   ced_patients: string
   nom_patients: string
   ape_patients: string
-  activo: boolean
+  activo: boolean | 0 | 1
+  discapacidad?: boolean | null
 }
 
 interface DoctorOption {
@@ -31,9 +32,10 @@ interface AppointmentForm {
   id_patients: string
   id_doctors: string
   fecha_hora: string
+  estado: string
 }
 
-const emptyForm: AppointmentForm = { id_patients: '', id_doctors: '', fecha_hora: '' }
+const emptyForm: AppointmentForm = { id_patients: '', id_doctors: '', fecha_hora: '', estado: '' }
 
 function appointmentFromRow(row: Record<string, unknown>): AppointmentRecord | null {
   const id_appointments = Number(row.id_appointments)
@@ -44,9 +46,15 @@ function appointmentFromRow(row: Record<string, unknown>): AppointmentRecord | n
     !Number.isInteger(id_patients) ||
     !Number.isInteger(id_doctors) ||
     typeof row.fecha_hora !== 'string' ||
-    typeof row.estado !== 'string'
+    typeof row.nom_estado !== 'string'
   ) return null
-  return { id_appointments, id_patients, id_doctors, fecha_hora: row.fecha_hora, estado: row.estado }
+  return {
+    id_appointments,
+    id_patients,
+    id_doctors,
+    fecha_hora: row.fecha_hora,
+    nom_estado: row.nom_estado,
+  }
 }
 
 function toLocalInputValue(value: string): string {
@@ -68,6 +76,7 @@ export function AppointmentsPage() {
   const resource = useResource<AppointmentRecord[]>('/appointments/')
   const patients = useResource<PatientOption[]>('/patients/', canManage)
   const doctors = useResource<DoctorOption[]>('/doctors/', canManage)
+  const states = useResource<string[]>('/appointments/estados', canManage)
   const [form, setForm] = useState<AppointmentForm>(emptyForm)
   const [editing, setEditing] = useState<AppointmentRecord | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -75,7 +84,7 @@ export function AppointmentsPage() {
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
 
-  const activePatients = (patients.data ?? []).filter((patient) => patient.activo)
+  const activePatients = (patients.data ?? []).filter((patient) => patient.activo === 0 || patient.activo === true)
   const activeDoctors = (doctors.data ?? []).filter((doctor) => doctor.activo)
   const patientNames = new Map(activePatients.map((patient) => [
     patient.id_patients,
@@ -106,6 +115,7 @@ export function AppointmentsPage() {
       id_patients: String(appointment.id_patients),
       id_doctors: String(appointment.id_doctors),
       fecha_hora: toLocalInputValue(appointment.fecha_hora),
+      estado: appointment.nom_estado,
     })
     setEditing(appointment)
     setError(null)
@@ -128,13 +138,13 @@ export function AppointmentsPage() {
       const fecha_hora = new Date(form.fecha_hora).toISOString()
       const endpoint = editing ? `/appointments/${editing.id_appointments}` : '/appointments/'
       const payload = editing
-        ? { id_doctors: Number(form.id_doctors), fecha_hora }
+        ? { id_doctors: Number(form.id_doctors), fecha_hora, estado: form.estado }
         : { id_patients: Number(form.id_patients), id_doctors: Number(form.id_doctors), fecha_hora }
       await apiRequest<AppointmentRecord>(endpoint, {
         method: editing ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
       })
-      setFeedback(editing ? 'Cita reprogramada correctamente.' : 'Cita creada correctamente.')
+      setFeedback(editing ? 'Cita actualizada correctamente.' : 'Cita creada correctamente.')
       closeForm()
       resource.reload()
     } catch (reason) {
@@ -158,19 +168,19 @@ export function AppointmentsPage() {
           { key: 'fecha_hora', label: 'Fecha y hora', render: (value) => value ? formatDate(String(value)) : '—' },
           { key: 'id_patients', label: 'Paciente', render: (value) => patientNames.get(Number(value)) ?? `Paciente #${String(value ?? '')}` },
           { key: 'id_doctors', label: 'Médico', render: (value) => doctorNames.get(Number(value)) ?? `Médico #${String(value ?? '')}` },
-          { key: 'estado', label: 'Estado' },
+          { key: 'nom_estado', label: 'Estado' },
+          { key: 'discapacidad', label: 'Discapacidad', render: (value) => value === true ? 'Sí' : 'No' },
         ]}
         actions={canManage ? (row) => {
           const appointment = appointmentFromRow(row)
           if (!appointment) return <span className="muted">Datos incompletos</span>
-          const canReschedule = appointment.estado === 'PROGRAMADA' || appointment.estado === 'CONFIRMADA'
-          return canReschedule ? (
+          return (
             <div className="table-actions">
               <button className="action-button action-button-edit" type="button" onClick={() => startEdit(appointment)}>
-                Cambiar fecha o médico
+                Editar
               </button>
             </div>
-          ) : <span className="muted">No reprogramable</span>
+          )
         } : undefined}
         emptyMessage="No hay citas registradas."
         headerAction={canManage ? (
@@ -234,6 +244,15 @@ export function AppointmentsPage() {
                   <input value={patientNames.get(editing.id_patients) ?? `Paciente #${editing.id_patients}`} readOnly />
                 </div>
               )}
+              {(() => {
+                const selected = (patients.data ?? []).find((patient) => patient.id_patients === Number(editing ? editing.id_patients : form.id_patients))
+                return selected ? (
+                  <div className="field">
+                    <label>Discapacidad</label>
+                    <input value={selected.discapacidad === true ? 'Sí' : 'No'} readOnly />
+                  </div>
+                ) : null
+              })()}
               <div className="field">
                 <label htmlFor="appointment-doctor">Médico asignado</label>
                 <select
@@ -261,6 +280,22 @@ export function AppointmentsPage() {
                   required
                 />
               </div>
+              {editing && (
+                <div className="field">
+                  <label htmlFor="appointment-state">Estado</label>
+                  <select
+                    id="appointment-state"
+                    value={form.estado}
+                    onChange={(event) => updateField('estado', event.target.value)}
+                    required
+                    disabled={states.loading || Boolean(states.error)}
+                  >
+                    {(states.data ?? [editing.nom_estado]).map((state) => (
+                      <option key={state} value={state}>{state}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
             <div className="user-form-actions">
               <button className="button button-secondary" type="button" onClick={closeForm} disabled={submitting}>

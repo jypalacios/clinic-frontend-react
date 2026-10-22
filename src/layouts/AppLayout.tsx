@@ -10,6 +10,7 @@ const navigation = [
   { to: '/admin/audit', label: 'Auditoría', icon: '◷', permission: 'audit.view' },
   { to: '/assistant/patients', label: 'Gestión de pacientes', icon: '♧', permission: 'patients.view' },
   { to: '/assistant/appointments', label: 'Citas', icon: '▦', permission: 'appointments.view' },
+  { to: '/assistant/ingreso', label: 'Ingreso', icon: '⇥', permission: 'appointments.manage' },
   { to: '/doctor/patients', label: 'Mis pacientes', icon: '♧', permission: 'my_patients.view' },
   { to: '/doctor/history', label: 'Historia clínica', icon: '▤', permission: 'medical_history.view' },
 ]

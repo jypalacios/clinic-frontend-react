@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { apiRequest } from '../../api/client'
 import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
@@ -9,6 +9,19 @@ interface PatientOption {
   ced_patients: string
   nom_patients: string
   ape_patients: string
+}
+
+const DILATION_ALERT_MS = 20 * 60_000
+
+interface DoctorAppointment {
+  id_appointments: number
+  id_patients: number
+  paciente: string | null
+  fecha_hora: string
+  nom_estado: string
+  fec_ingreso: string | null
+  fec_dilatacion: string | null
+  prioridad: boolean | null
 }
 
 interface ClinicalEntry {
@@ -80,6 +93,19 @@ export function MedicalHistoryPage() {
   const canArchive = role === 'admin' && hasPermission('medical_history.delete')
   const resource = useResource<ClinicalRecord[]>('/clinical-records/')
   const patients = useResource<PatientOption[]>('/patients/', canWrite)
+  const appointments = useResource<DoctorAppointment[]>('/appointments/', role === 'doctor' && hasPermission('appointments.view'))
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const assignedPatientIds = new Set(
+    (appointments.data ?? [])
+      .filter((appointment) => !['CANCELADA', 'NO_ASISTIO'].includes(appointment.nom_estado))
+      .map((appointment) => appointment.id_patients),
+  )
+  const assignedPatients = (patients.data ?? []).filter((patient) => assignedPatientIds.has(patient.id_patients))
+  const patientOptionsLoading = patients.loading || appointments.loading
   const [selectedRecord, setSelectedRecord] = useState<ClinicalRecord | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [entryRecordId, setEntryRecordId] = useState<number | null>(null)
@@ -212,6 +238,31 @@ export function MedicalHistoryPage() {
 
   return (
     <section>
+      {role === 'doctor' && (
+        <ResourceTable
+          title="Mis citas programadas"
+          description="Citas asignadas a tu agenda, ordenadas por fecha."
+          resource={appointments}
+          columns={[
+            { key: 'id_appointments', label: 'Cita' },
+            { key: 'paciente', label: 'Paciente', render: (value) => String(value ?? '—') },
+            { key: 'fecha_hora', label: 'Fecha y hora', render: (value) => value ? formatDate(String(value)) : '—' },
+            { key: 'nom_estado', label: 'Estado' },
+            { key: 'fec_ingreso', label: 'Fecha de ingreso', render: (value) => value ? formatDate(String(value)) : '—' },
+            { key: 'fec_dilatacion', label: 'Fecha de dilatación', render: (value, row) => {
+              if (!value) return '—'
+              const overdue = row.nom_estado === 'EN SALA DE ESPERA'
+                && now - new Date(String(value)).getTime() > DILATION_ALERT_MS
+              const text = formatDate(String(value))
+              return overdue ? <span className="priority-badge priority-high">{text}</span> : text
+            } },
+            { key: 'prioridad', label: 'Prioridad', render: (value) => value === true
+              ? <span className="priority-badge priority-high">Prioritaria</span>
+              : value === false ? 'Normal' : '—' },
+          ]}
+          emptyMessage="No tienes citas programadas."
+        />
+      )}
       <ResourceTable
         title="Historias clínicas"
         description={canWrite
@@ -282,9 +333,9 @@ export function MedicalHistoryPage() {
           <form className="user-form" onSubmit={createHistory}>
             <div className="field">
               <label htmlFor="history-patient">Paciente</label>
-              <select id="history-patient" value={patientId} onChange={(event) => setPatientId(event.target.value)} required disabled={patients.loading || Boolean(patients.error) || !patients.data?.length}>
-                <option value="">Seleccione un paciente</option>
-                {patients.data?.map((patient) => (
+              <select id="history-patient" value={patientId} onChange={(event) => setPatientId(event.target.value)}               required disabled={patientOptionsLoading || Boolean(patients.error) || !assignedPatients.length}>
+                              <option value="">{assignedPatients.length || patientOptionsLoading ? 'Seleccione un paciente' : 'No tienes pacientes con cita asignada'}</option>
+                              {assignedPatients.map((patient) => (
                   <option key={patient.id_patients} value={patient.id_patients}>
                     {patient.ced_patients} · {patient.nom_patients} {patient.ape_patients}
                   </option>
@@ -293,7 +344,7 @@ export function MedicalHistoryPage() {
             </div>
             {entryFields(entryForm, updateEntry, 'initial')}
             <div className="user-form-actions">
-              <button className="button button-primary" type="submit" disabled={submitting || patients.loading || Boolean(patients.error) || !patients.data?.length}>{submitting ? 'Guardando…' : 'Crear historia'}</button>
+              <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !assignedPatients.length}>{submitting ? 'Guardando…' : 'Crear historia'}</button>
               <button className="button button-secondary" type="button" onClick={() => { setCreateOpen(false); setEntryForm(emptyEntry); setError(null) }}>Cancelar</button>
             </div>
           </form>
