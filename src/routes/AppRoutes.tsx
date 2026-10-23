@@ -10,6 +10,7 @@ import { AuditPage } from '../pages/admin/AuditPage'
 import { PatientsPage } from '../pages/assistant/PatientsPage'
 import { AppointmentsPage } from '../pages/assistant/AppointmentsPage'
 import { IngresoPage } from '../pages/assistant/IngresoPage'
+import { AllergiesPage } from '../pages/assistant/AllergiesPage'
 import { MyPatientsPage } from '../pages/doctor/MyPatientsPage'
 import { MedicalHistoryPage } from '../pages/doctor/MedicalHistoryPage'
 
@@ -40,6 +41,9 @@ export function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute permission="appointments.manage" />}>
             <Route path="/assistant/ingreso" element={<IngresoPage />} />
+          </Route>
+          <Route element={<ProtectedRoute anyPermissions={['allergy_types.view', 'allergies.view']} />}>
+            <Route path="/assistant/allergies" element={<AllergiesPage />} />
           </Route>
           <Route element={<ProtectedRoute permission="my_patients.view" />}>
             <Route path="/doctor/patients" element={<MyPatientsPage />} />

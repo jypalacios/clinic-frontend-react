@@ -249,7 +249,7 @@ export function MedicalHistoryPage() {
             { key: 'fecha_hora', label: 'Fecha y hora', render: (value) => value ? formatDate(String(value)) : '—' },
             { key: 'nom_estado', label: 'Estado' },
             { key: 'fec_ingreso', label: 'Fecha de ingreso', render: (value) => value ? formatDate(String(value)) : '—' },
-            { key: 'fec_dilatacion', label: 'Fecha de dilatación', render: (value, row) => {
+            { key: 'fec_dilatacion', label: 'Hora de dilatación', render: (value, row) => {
               if (!value) return '—'
               const overdue = row.nom_estado === 'EN SALA DE ESPERA'
                 && now - new Date(String(value)).getTime() > DILATION_ALERT_MS
@@ -259,7 +259,11 @@ export function MedicalHistoryPage() {
             { key: 'prioridad', label: 'Prioridad', render: (value) => value === true
               ? <span className="priority-badge priority-high">Prioritaria</span>
               : value === false ? 'Normal' : '—' },
+            { key: 'discapacidad', label: 'Discapacidad', render: (value) => value === true
+              ? <span className="priority-badge priority-high">Sí</span>
+              : 'No' },
           ]}
+          pageSize={5}
           emptyMessage="No tienes citas programadas."
         />
       )}
