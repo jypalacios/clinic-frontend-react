@@ -16,22 +16,49 @@ function countRecords(value: unknown): number | null {
   return null
 }
 
+const SCHEDULED_STATES = ['PROGRAMADA', 'EN SALA DE ESPERA', 'CONFIRMADA']
+
+function countTodayScheduled(value: unknown, onlyDisability = false): number | null {
+  if (!Array.isArray(value)) return countRecords(value)
+  const today = new Date().toDateString()
+  return value.filter((item) => {
+    const appointment = item as { fecha_hora?: string; nom_estado?: string; discapacidad?: boolean | null }
+    if (onlyDisability && appointment.discapacidad !== true) return false
+    if (!appointment.fecha_hora || !SCHEDULED_STATES.includes(String(appointment.nom_estado))) return false
+    const date = new Date(appointment.fecha_hora)
+    return !Number.isNaN(date.getTime()) && date.toDateString() === today
+  }).length
+}
+
+function countTodayConfirmedPatients(value: unknown): number | null {
+  if (!Array.isArray(value)) return countRecords(value)
+  const today = new Date().toDateString()
+  const patients = new Set<number>()
+  for (const item of value) {
+    const appointment = item as { id_patients?: number; fecha_hora?: string; nom_estado?: string }
+    if (appointment.nom_estado !== 'CONFIRMADA' || !appointment.fecha_hora) continue
+    const date = new Date(appointment.fecha_hora)
+    if (!Number.isNaN(date.getTime()) && date.toDateString() === today) patients.add(Number(appointment.id_patients))
+  }
+  return patients.size
+}
+
 export function DashboardPage() {
-  const { user, role, hasPermission } = useAuth()
+  const { user, hasPermission } = useAuth()
   const canViewPatients = hasPermission('patients.view')
   const canViewDoctors = hasPermission('doctors.view')
   const canViewAppointments = hasPermission('appointments.view')
   const patients = useResource<unknown>('/patients/', canViewPatients)
-  const doctors = useResource<unknown>('/doctors/', canViewDoctors)
   const appointments = useResource<unknown>('/appointments/', canViewAppointments)
   const name = user?.nombre || user?.apellido || 'Equipo clínico'
-  const hasErrors = (canViewPatients && patients.error) || (canViewDoctors && doctors.error) || (canViewAppointments && appointments.error)
+  const hasErrors = (canViewPatients && patients.error) || (canViewAppointments && appointments.error)
   const quickLinks = [
     canViewPatients && { to: '/assistant/patients', icon: '♧', title: 'Pacientes', text: 'Consulta y gestiona pacientes.' },
     canViewAppointments && { to: '/assistant/appointments', icon: '▦', title: 'Citas', text: 'Revisa la agenda de atención.' },
     canViewDoctors && { to: '/admin/doctors', icon: '✚', title: 'Profesionales', text: 'Consulta el equipo clínico.' },
     hasPermission('my_patients.view') && { to: '/doctor/patients', icon: '♧', title: 'Mis pacientes', text: 'Consulta tu lista de pacientes asignados.' },
     hasPermission('medical_history.view') && { to: '/doctor/history', icon: '▤', title: 'Historia clínica', text: 'Accede a la información clínica.' },
+    hasPermission('consultations.view') && { to: '/doctor/consult', icon: '☷', title: 'Consultas', text: 'Registra y consulta atenciones clínicas.' },
   ].filter((item) => item !== false)
 
   return (
@@ -51,9 +78,9 @@ export function DashboardPage() {
       {hasErrors && <div className="notice notice-warning">Algunos indicadores no están disponibles. Revisa la conexión con la API.</div>}
       <div className="stats-grid">
         <StatCard label="Pacientes registrados" value={canViewPatients ? countRecords(patients.data)?.toLocaleString() ?? '—' : '—'} helper="Base de pacientes" icon="♧" tone="blue" />
-        <StatCard label="Citas programadas" value={canViewAppointments ? countRecords(appointments.data)?.toLocaleString() ?? '—' : '—'} helper="Agenda clínica" icon="▦" tone="green" />
-        <StatCard label="Profesionales" value={canViewDoctors ? countRecords(doctors.data)?.toLocaleString() ?? '—' : '—'} helper="Equipo médico" icon="✚" tone="violet" />
-        <StatCard label="Tu perfil" value={role === 'unknown' ? String(user?.role ?? 'Activo') : role === 'admin' ? 'Admin' : role === 'doctor' ? 'Médico' : 'Asistente'} helper="Sesión autenticada" icon="♙" tone="orange" />
+        <StatCard label="Citas programadas" value={canViewAppointments ? countTodayScheduled(appointments.data)?.toLocaleString() ?? '—' : '—'} helper="Agenda de hoy" icon="▦" tone="green" />
+        <StatCard label="Citas hoy con discapacidad" value={canViewAppointments ? countTodayScheduled(appointments.data, true)?.toLocaleString() ?? '—' : '—'} helper="Pacientes con discapacidad" icon="♿" tone="violet" />
+        <StatCard label="Pacientes confirmados hoy" value={canViewAppointments ? countTodayConfirmedPatients(appointments.data)?.toLocaleString() ?? '—' : '—'} helper="Citas confirmadas" icon="✔" tone="orange" />
       </div>
       <div className="dashboard-columns">
         <div className="panel welcome-panel">

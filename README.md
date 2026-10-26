@@ -139,6 +139,11 @@ El rol `ASISTENTE` puede consultar y crear usuarios, pero no puede asignar roles
 - registro de médicos
 - consulta por especialidad y datos del profesional
 
+### Atención clínica
+- Historia clínica conserva la consulta y gestión de historias con `medical_history.*`.
+- Consultas muestra la misma información clínica, limitada a pacientes que aparecen en Mis citas programadas; `consultations.view` permite consultar, `consultations.create` registrar atenciones y `consultations.edit` rectificar notas.
+- Los accesos a Consultas se muestran según los permisos asignados al rol autenticado.
+
 ### Citas
 - agendamiento de consultas
 - asociación con paciente y médico

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { apiRequest } from '../../api/client'
 import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
@@ -12,6 +12,13 @@ interface PatientOption {
 }
 
 const DILATION_ALERT_MS = 20 * 60_000
+
+interface AllergyInfo {
+  id_alergia: number
+  nom_tipo_alergia?: string | null
+  activo: boolean
+}
+const SCHEDULED_STATES = ['PROGRAMADA', 'EN SALA DE ESPERA', 'CONFIRMADA']
 
 interface DoctorAppointment {
   id_appointments: number
@@ -87,13 +94,60 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
-export function MedicalHistoryPage() {
+export interface ClinicalRecordsAccess {
+  createPermission: string
+  editPermission: string
+  archivePermission?: string
+  title: string
+  entityName: string
+  pluralEntityName: string
+  readOnlyDescription: string
+  createDescription: string
+  filterToScheduledPatients?: boolean
+  appointmentPatientAction?: boolean
+  createInModal?: boolean
+}
+
+export function ClinicalRecordsPage({
+  access,
+}: {
+  access: ClinicalRecordsAccess
+}) {
   const { role, hasPermission } = useAuth()
-  const canWrite = role === 'doctor' && hasPermission('medical_history.manage')
-  const canArchive = role === 'admin' && hasPermission('medical_history.delete')
+  const canCreate = role === 'doctor' && hasPermission(access.createPermission)
+  const canEdit = role === 'doctor' && hasPermission(access.editPermission)
+  const canWrite = canCreate || canEdit
+  const canArchive = access.archivePermission !== undefined
+    && role === 'admin'
+    && hasPermission(access.archivePermission)
   const resource = useResource<ClinicalRecord[]>('/clinical-records/')
-  const patients = useResource<PatientOption[]>('/patients/', canWrite)
-  const appointments = useResource<DoctorAppointment[]>('/appointments/', role === 'doctor' && hasPermission('appointments.view'))
+  const patients = useResource<PatientOption[]>('/patients/', canCreate)
+  const appointments = useResource<DoctorAppointment[]>(
+    '/appointments/',
+    hasPermission('appointments.view')
+      && (role === 'doctor' || access.filterToScheduledPatients === true),
+  )
+  const scheduledAppointments = {
+    ...appointments,
+    data: (appointments.data ?? []).filter((appointment) => SCHEDULED_STATES.includes(appointment.nom_estado)),
+  }
+  const scheduledPatientIds = new Set(
+    scheduledAppointments.data.map((appointment) => appointment.id_patients),
+  )
+  const visibleResource = access.filterToScheduledPatients
+    ? {
+        ...resource,
+        data: appointments.loading || appointments.error
+          ? []
+          : (resource.data ?? []).filter((record) => scheduledPatientIds.has(record.id_patients)),
+        error: resource.error ?? appointments.error,
+        loading: resource.loading || appointments.loading,
+        reload: () => {
+          resource.reload()
+          appointments.reload()
+        },
+      }
+    : resource
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000)
@@ -115,6 +169,77 @@ export function MedicalHistoryPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const createPanelRef = useRef<HTMLDivElement>(null)
+  const detailPanelRef = useRef<HTMLDivElement>(null)
+
+  const modalOpen = Boolean(access.createInModal) && createOpen && canCreate
+  const allergyPatientId = access.createInModal
+    ? (modalOpen ? Number(patientId) : selectedRecord?.id_patients ?? 0)
+    : 0
+  const allergies = useResource<AllergyInfo[]>(
+    `/allergies/?patient_id=${allergyPatientId}`,
+    allergyPatientId > 0,
+  )
+  const allergyBanner = access.createInModal && allergyPatientId > 0 ? (
+    allergies.loading ? (
+      <div className="notice allergy-banner" role="status">Consultando alergias…</div>
+    ) : allergies.error ? (
+      <div className="notice notice-warning allergy-banner" role="alert">No se pudieron consultar las alergias del paciente.</div>
+    ) : (() => {
+      const active = (allergies.data ?? []).filter((item) => item.activo)
+      return active.length ? (
+        <div className="notice notice-error allergy-banner" role="alert">
+          <strong>⚠ Paciente con alergias:</strong>
+          <span>{[...new Set(active.map((item) => item.nom_tipo_alergia ?? 'Sin tipo'))].join(', ')}</span>
+        </div>
+      ) : (
+        <div className="notice notice-success allergy-banner" role="status">Sin alergias registradas.</div>
+      )
+    })()
+  ) : null
+
+  const entryModalOpen = Boolean(access.createInModal) && Boolean(selectedRecord)
+  const anyModalOpen = modalOpen || entryModalOpen
+
+  function closeDetail() {
+    setSelectedRecord(null)
+    resetEntryForm()
+  }
+
+  function closeCreate() {
+    setCreateOpen(false)
+    setPatientId('')
+    setEntryForm(emptyEntry)
+    setError(null)
+  }
+
+  useEffect(() => {
+    if (!access.appointmentPatientAction || anyModalOpen) return
+    const target = createOpen ? createPanelRef.current : selectedRecord ? detailPanelRef.current : null
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [access.appointmentPatientAction, createOpen, anyModalOpen, selectedRecord])
+
+  useEffect(() => {
+    if (!entryModalOpen || entryRecordId === null) return
+    detailPanelRef.current?.parentElement?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [entryModalOpen, entryRecordId, correctionEntry])
+
+  useEffect(() => {
+    if (!anyModalOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || submitting) return
+      if (modalOpen) closeCreate()
+      else if (entryRecordId !== null) resetEntryForm()
+      else closeDetail()
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [anyModalOpen, modalOpen, submitting, entryRecordId])
 
   function resetEntryForm() {
     setEntryRecordId(null)
@@ -135,24 +260,62 @@ export function MedicalHistoryPage() {
     )
   }
 
+  function appointmentToFinalize(): DoctorAppointment | undefined {
+    const id = Number(patientId)
+    const today = new Date().toDateString()
+    return scheduledAppointments.data
+      .filter((item) => item.id_patients === id)
+      .sort((a, b) => {
+        const aToday = new Date(a.fecha_hora).toDateString() === today ? 0 : 1
+        const bToday = new Date(b.fecha_hora).toDateString() === today ? 0 : 1
+        return aToday - bToday || new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime()
+      })[0]
+  }
+
   async function createHistory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const submitter = (event.nativeEvent as SubmitEvent).submitter
+    const finalize = submitter?.getAttribute('data-finalize') === 'true'
+    const appointment = finalize ? appointmentToFinalize() : undefined
+    if (finalize && !appointment) {
+      setError('El paciente no tiene una cita programada para finalizar.')
+      return
+    }
     setSubmitting(true)
     setError(null)
     setNotice(null)
+    let created: ClinicalRecord
     try {
-      const created = await apiRequest<ClinicalRecord>('/clinical-records/', {
+      created = await apiRequest<ClinicalRecord>('/clinical-records/', {
         method: 'POST',
         body: JSON.stringify({ id_patients: Number(patientId), ...payloadFromEntry() }),
       })
-      setNotice('Historia clínica y primera nota registradas correctamente.')
-      setSelectedRecord(created)
+    } catch (reason) {
+      setError(getErrorMessage(reason, `No fue posible crear ${access.entityName}.`))
+      setSubmitting(false)
+      return
+    }
+    try {
+      if (appointment) {
+        await apiRequest(`/appointments/${appointment.id_appointments}/finaliza`, { method: 'PUT' })
+        setNotice(`${access.entityName} guardada y consulta finalizada; la cita quedó como ATENDIDA.`)
+        setSelectedRecord(null)
+        appointments.reload()
+      } else {
+        setNotice(`${access.entityName} y primera nota registradas correctamente.`)
+        setSelectedRecord(created)
+      }
       setPatientId('')
       setEntryForm(emptyEntry)
       setCreateOpen(false)
       resource.reload()
     } catch (reason) {
-      setError(getErrorMessage(reason, 'No fue posible crear la historia clínica.'))
+      setPatientId('')
+      setEntryForm(emptyEntry)
+      setCreateOpen(false)
+      setSelectedRecord(created)
+      resource.reload()
+      setError(getErrorMessage(reason, 'La historia se guardó, pero no fue posible finalizar la consulta.'))
     } finally {
       setSubmitting(false)
     }
@@ -232,6 +395,41 @@ export function MedicalHistoryPage() {
     setNotice(null)
   }
 
+  function openAppointmentPatient(patientId: number) {
+    if (!Number.isInteger(patientId) || patientId <= 0) return
+    const existingRecord = resource.data?.find((record) => record.id_patients === patientId)
+    setError(null)
+    setNotice(null)
+    if (existingRecord) {
+      setSelectedRecord(existingRecord)
+      setCreateOpen(false)
+      resetEntryForm()
+      return
+    }
+    setSelectedRecord(null)
+    setEntryRecordId(null)
+    setCorrectionEntry(null)
+    setPatientId(String(patientId))
+    setEntryForm(emptyEntry)
+    setCreateOpen(true)
+  }
+
+  const entryFormOpen = Boolean(selectedRecord) && entryRecordId !== null && (correctionEntry ? canEdit : canCreate)
+  const entryFormNode = (
+    <form className="user-form clinical-edit-form" onSubmit={saveEntry}>
+      <div className="user-form-header">
+        <span className="eyebrow">{correctionEntry ? `RECTIFICACIÓN DE NOTA #${correctionEntry.id_entries}` : 'NUEVA EVOLUCIÓN'}</span>
+        <h2>{correctionEntry ? 'Registrar una rectificación' : 'Agregar atención'}</h2>
+        <p>Los registros clínicos son inmutables. Al editar, el sistema conserva la nota original y guarda esta como una nueva rectificación.</p>
+      </div>
+      {entryFields(entryForm, updateEntry, 'edit')}
+      <div className="user-form-actions">
+        <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
+        <button className="button button-secondary" type="button" onClick={resetEntryForm}>Cancelar</button>
+      </div>
+    </form>
+  )
+
   const selectedPatientName = selectedRecord
     ? `${selectedRecord.patient.nom_patients} ${selectedRecord.patient.ape_patients}`
     : ''
@@ -242,10 +440,27 @@ export function MedicalHistoryPage() {
         <ResourceTable
           title="Mis citas programadas"
           description="Citas asignadas a tu agenda, ordenadas por fecha."
-          resource={appointments}
+          resource={scheduledAppointments}
           columns={[
             { key: 'id_appointments', label: 'Cita' },
-            { key: 'paciente', label: 'Paciente', render: (value) => String(value ?? '—') },
+            { key: 'paciente', label: 'Paciente', render: (value, row) => access.appointmentPatientAction ? (
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => openAppointmentPatient(Number(row.id_patients))}
+                disabled={
+                  resource.loading
+                  || Boolean(resource.error)
+                  || appointments.loading
+                  || !Number.isInteger(Number(row.id_patients))
+                  || Number(row.id_patients) <= 0
+                  || (!resource.data?.some((record) => record.id_patients === Number(row.id_patients)) && !canCreate)
+                }
+                aria-label={`${resource.data?.some((record) => record.id_patients === Number(row.id_patients)) ? 'Ver historia clínica de' : 'Crear historia clínica para'} ${String(value ?? 'paciente')}`}
+              >
+                {String(value ?? '—')}
+              </button>
+            ) : String(value ?? '—') },
             { key: 'fecha_hora', label: 'Fecha y hora', render: (value) => value ? formatDate(String(value)) : '—' },
             { key: 'nom_estado', label: 'Estado' },
             { key: 'fec_ingreso', label: 'Fecha de ingreso', render: (value) => value ? formatDate(String(value)) : '—' },
@@ -268,11 +483,11 @@ export function MedicalHistoryPage() {
         />
       )}
       <ResourceTable
-        title="Historias clínicas"
+        title={access.title}
         description={canWrite
-          ? 'Consulta las historias de tus pacientes, registra atenciones y rectifica notas mediante una nueva entrada.'
-          : 'Consulta el estado de las historias clínicas. El archivo conserva todas sus notas.'}
-        resource={resource}
+          ? `Consulta las ${access.pluralEntityName} de tus pacientes, registra atenciones y rectifica notas mediante una nueva entrada.`
+          : access.readOnlyDescription}
+        resource={visibleResource}
         columns={[
           { key: 'id_clinic', label: 'Historia' },
           { key: 'patient', label: 'Paciente', render: (value) => {
@@ -288,14 +503,16 @@ export function MedicalHistoryPage() {
           { key: 'activo', label: 'Estado', render: (value) => value === true ? 'Activa' : 'Archivada' },
           { key: 'total_entradas', label: 'Notas', render: (value) => Number(value ?? 0) },
         ]}
-        emptyMessage="No hay historias clínicas disponibles."
-        headerAction={canWrite ? (
+        emptyMessage={access.filterToScheduledPatients
+          ? 'No hay historias clínicas de pacientes con citas programadas.'
+          : `No hay ${access.pluralEntityName} disponibles.`}
+        headerAction={canCreate ? (
           <button className="button button-primary" type="button" onClick={() => {
             setCreateOpen((open) => !open)
             setError(null)
             setNotice(null)
           }}>
-            {createOpen ? 'Cancelar' : 'Nueva historia clínica'}
+            {createOpen ? 'Cancelar' : `Nueva ${access.entityName}`}
           </button>
         ) : undefined}
         actions={(row) => {
@@ -306,7 +523,7 @@ export function MedicalHistoryPage() {
                 setSelectedRecord(record)
                 resetEntryForm()
               }}>
-                {canWrite ? 'Ver / editar' : 'Ver'}
+                {canEdit ? 'Ver / editar' : 'Ver'}
               </button>
               {canArchive && record.activo && (
                 <button type="button" className="action-button action-button-delete" onClick={() => void archiveRecord(record)}>
@@ -323,17 +540,29 @@ export function MedicalHistoryPage() {
         }}
       />
 
-      {error && <div className="notice notice-error clinical-feedback" role="alert"><strong>Error.</strong><span>{error}</span></div>}
+      {error && !anyModalOpen && <div className="notice notice-error clinical-feedback" role="alert"><strong>Error.</strong><span>{error}</span></div>}
       {notice && <div className="notice notice-success clinical-feedback" role="status">{notice}</div>}
 
-      {createOpen && canWrite && (
-        <div className="panel user-form-panel clinical-form-panel">
+      {createOpen && canCreate && (
+        <div
+          className={access.createInModal ? 'modal-backdrop' : undefined}
+          onMouseDown={access.createInModal ? (event) => { if (event.target === event.currentTarget) closeCreate() } : undefined}
+        >
+        <div
+          className={`panel user-form-panel clinical-form-panel${access.createInModal ? ' modal-dialog' : ''}`}
+          ref={createPanelRef}
+          role={access.createInModal ? 'dialog' : undefined}
+          aria-modal={access.createInModal ? true : undefined}
+          aria-label={access.createInModal ? `Nueva ${access.entityName}` : undefined}
+        >
+          {allergyBanner}
           <div className="user-form-header">
-            <span className="eyebrow">NUEVA HISTORIA</span>
-            <h2>Registrar historia y primera atención</h2>
-            <p>El médico tratante se toma de la cuenta autenticada; una historia por paciente.</p>
+            <span className="eyebrow">NUEVA {access.entityName.toLocaleUpperCase('es-CO')}</span>
+            <h2>Registrar {access.entityName} y primera atención</h2>
+            <p>{access.createDescription}</p>
           </div>
           {patients.error && <div className="notice notice-error" role="alert"><span>No se pudieron cargar los pacientes: {patients.error}</span><button type="button" className="text-button" onClick={patients.reload}>Reintentar</button></div>}
+          {error && access.createInModal && <div className="notice notice-error" role="alert"><strong>Error.</strong><span>{error}</span></div>}
           <form className="user-form" onSubmit={createHistory}>
             <div className="field">
               <label htmlFor="history-patient">Paciente</label>
@@ -348,25 +577,43 @@ export function MedicalHistoryPage() {
             </div>
             {entryFields(entryForm, updateEntry, 'initial')}
             <div className="user-form-actions">
-              <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !assignedPatients.length}>{submitting ? 'Guardando…' : 'Crear historia'}</button>
-              <button className="button button-secondary" type="button" onClick={() => { setCreateOpen(false); setEntryForm(emptyEntry); setError(null) }}>Cancelar</button>
+              <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !assignedPatients.length}>{submitting ? 'Guardando…' : `Crear ${access.entityName}`}</button>
+              {access.createInModal && (
+                <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !assignedPatients.length || !appointmentToFinalize()}>
+                  Finalizar consulta
+                </button>
+              )}
+              <button className="button button-secondary" type="button" onClick={closeCreate}>Cancelar</button>
             </div>
           </form>
+        </div>
         </div>
       )}
 
       {selectedRecord && (
-        <div className="panel user-form-panel clinical-detail-panel">
+        <div
+          className={access.createInModal ? 'modal-backdrop' : undefined}
+          onMouseDown={access.createInModal ? (event) => { if (event.target === event.currentTarget && !submitting) closeDetail() } : undefined}
+        >
+        <div
+          className={`panel user-form-panel clinical-detail-panel${access.createInModal ? ' modal-dialog' : ''}`}
+          ref={detailPanelRef}
+          role={access.createInModal ? 'dialog' : undefined}
+          aria-modal={access.createInModal ? true : undefined}
+          aria-label={access.createInModal ? `${access.entityName} de ${selectedPatientName}` : undefined}
+        >
+          {allergyBanner}
+          {error && access.createInModal && <div className="notice notice-error" role="alert"><strong>Error.</strong><span>{error}</span></div>}
           <div className="user-form-header clinical-detail-heading">
             <div>
-              <span className="eyebrow">HISTORIA #{selectedRecord.id_clinic}</span>
+              <span className="eyebrow">{access.entityName.toLocaleUpperCase('es-CO')} #{selectedRecord.id_clinic}</span>
               <h2>{selectedPatientName}</h2>
               <p>Identificación {selectedRecord.patient.ced_patients} · Tratante: {selectedRecord.doctor.nom_doctors} {selectedRecord.doctor.ape_doctors}</p>
             </div>
-            <button className="button button-secondary" type="button" onClick={() => { setSelectedRecord(null); resetEntryForm() }}>Cerrar</button>
+            <button className="button button-secondary" type="button" onClick={closeDetail}>Cerrar</button>
           </div>
 
-          {canWrite && selectedRecord.activo && entryRecordId === null && (
+          {canCreate && selectedRecord.activo && entryRecordId === null && (
             <div className="user-form-actions clinical-entry-actions">
               <button className="button button-primary" type="button" onClick={() => startNewEntry(selectedRecord)}>Nueva evolución</button>
             </div>
@@ -376,13 +623,15 @@ export function MedicalHistoryPage() {
             <div className="notice notice-warning">No se recibieron notas para esta historia. Solo las cuentas médicas vinculadas pueden consultar el contenido clínico.</div>
           )}
 
+          {entryFormOpen && access.createInModal && entryFormNode}
+
           <div className="clinical-entry-list">
             {selectedRecord.entries.map((entry) => (
               <article className="clinical-entry" key={entry.id_entries}>
                 <div className="clinical-entry-heading">
                   <div><strong>{entry.motivo_consulta}</strong><span>{formatDate(entry.fec_entrada)} · {entry.medico}</span></div>
                   {entry.id_entries_rectifica && <span className="clinical-correction-pill">Rectifica nota #{entry.id_entries_rectifica}</span>}
-                  {canWrite && selectedRecord.activo && (
+                  {canEdit && selectedRecord.activo && (
                     <button type="button" className="action-button action-button-edit" onClick={() => startCorrection(selectedRecord, entry)}>Editar / rectificar</button>
                   )}
                 </div>
@@ -397,24 +646,25 @@ export function MedicalHistoryPage() {
             ))}
           </div>
 
-          {canWrite && entryRecordId !== null && (
-            <form className="user-form clinical-edit-form" onSubmit={saveEntry}>
-              <div className="user-form-header">
-                <span className="eyebrow">{correctionEntry ? `RECTIFICACIÓN DE NOTA #${correctionEntry.id_entries}` : 'NUEVA EVOLUCIÓN'}</span>
-                <h2>{correctionEntry ? 'Registrar una rectificación' : 'Agregar atención'}</h2>
-                <p>Los registros clínicos son inmutables. Al editar, el sistema conserva la nota original y guarda esta como una nueva rectificación.</p>
-              </div>
-              {entryFields(entryForm, updateEntry, 'edit')}
-              <div className="user-form-actions">
-                <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
-                <button className="button button-secondary" type="button" onClick={resetEntryForm}>Cancelar</button>
-              </div>
-            </form>
-          )}
+          {entryFormOpen && !access.createInModal && entryFormNode}
+        </div>
         </div>
       )}
     </section>
   )
+}
+
+export function MedicalHistoryPage() {
+  return <ClinicalRecordsPage access={{
+    title: 'Historias clínicas',
+    entityName: 'historia clínica',
+    pluralEntityName: 'historias clínicas',
+    readOnlyDescription: 'Consulta el estado de las historias clínicas. El archivo conserva todas sus notas.',
+    createDescription: 'El médico tratante se toma de la cuenta autenticada; una historia por paciente.',
+    createPermission: 'medical_history.manage',
+    editPermission: 'medical_history.manage',
+    archivePermission: 'medical_history.delete',
+  }} />
 }
 
 function entryFields(form: EntryForm, update: (field: keyof EntryForm, value: string) => void, prefix: string) {

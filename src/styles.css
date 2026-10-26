@@ -115,6 +115,11 @@ tbody tr:hover { background: #fbfcfe; }
 .clinical-feedback { margin: 16px 0; }
 .clinical-form-panel, .clinical-detail-panel { margin-top: 22px; }
 .clinical-form-panel .user-form-header p, .clinical-detail-heading p, .clinical-edit-form .user-form-header p { margin: 7px 0 0; color: #75849a; font-size: 11px; line-height: 1.6; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; overflow-y: auto; background: rgba(15, 28, 48, .55); }
+.modal-dialog { width: 100%; max-width: 760px; margin: 0 auto; box-shadow: 0 24px 60px rgba(15, 28, 48, .35); }
+.allergy-banner { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.table-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px; }
+.table-filters .field { min-width: 160px; }
 .clinical-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; }
 .clinical-field-wide { grid-column: 1 / -1; }
 .field textarea { width: 100%; min-height: 86px; padding: 10px 12px; border: 1px solid #e3e9ef; border-radius: 7px; outline: 0; color: #33465d; background: #fff; font: inherit; font-size: 12px; line-height: 1.55; resize: vertical; }

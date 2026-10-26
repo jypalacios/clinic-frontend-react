@@ -14,6 +14,7 @@ const navigation = [
   { to: '/assistant/allergies', label: 'Alergias', icon: '✱', anyPermissions: ['allergy_types.view', 'allergies.view'] },
   { to: '/doctor/patients', label: 'Mis pacientes', icon: '♧', permission: 'my_patients.view' },
   { to: '/doctor/history', label: 'Historia clínica', icon: '▤', permission: 'medical_history.view' },
+  { to: '/doctor/consult', label: 'Consultas', icon: '☷', permission: 'consultations.view' },
 ]
 
 const roleLabels: Record<string, string> = {

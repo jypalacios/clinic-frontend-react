@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { apiRequest } from '../../api/client'
 import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
@@ -70,13 +70,34 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat('es-CO', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
+function toDateInput(offsetDays: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + offsetDays)
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 10)
+}
+
 export function AppointmentsPage() {
   const { hasPermission } = useAuth()
   const canManage = hasPermission('appointments.manage')
-  const resource = useResource<AppointmentRecord[]>('/appointments/')
+  const allAppointments = useResource<AppointmentRecord[]>('/appointments/')
   const patients = useResource<PatientOption[]>('/patients/', canManage)
   const doctors = useResource<DoctorOption[]>('/doctors/', canManage)
-  const states = useResource<string[]>('/appointments/estados', canManage)
+  const states = useResource<string[]>('/appointments/estados')
+  const [stateFilter, setStateFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState(() => toDateInput(-1))
+  const [dateTo, setDateTo] = useState(() => toDateInput(2))
+  const resource = {
+    ...allAppointments,
+    data: (allAppointments.data ?? []).filter((appointment) => {
+      if (stateFilter && appointment.nom_estado !== stateFilter) return false
+      const day = toLocalInputValue(appointment.fecha_hora).slice(0, 10)
+      if (!day) return false
+      if (dateFrom && day < dateFrom) return false
+      if (dateTo && day > dateTo) return false
+      return true
+    }),
+  }
   const [form, setForm] = useState<AppointmentForm>(emptyForm)
   const [editing, setEditing] = useState<AppointmentRecord | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -157,12 +178,49 @@ export function AppointmentsPage() {
   const catalogError = patients.error || doctors.error
   const catalogLoading = patients.loading || doctors.loading
 
+  useEffect(() => {
+    if (!formOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !submitting) closeForm()
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [formOpen, submitting])
+
   return (
     <section>
       <ResourceTable
         title="Citas"
         description="Agenda citas y reprograma su fecha, hora o médico asignado."
         resource={resource}
+        pageSize={10}
+        filters={(
+          <div className="table-filters">
+            <div className="field">
+              <label htmlFor="filter-state">Estado</label>
+              <select id="filter-state" value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}>
+                <option value="">Todos</option>
+                {(states.data ?? []).map((state) => <option key={state} value={state}>{state}</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="filter-from">Fecha inicio</label>
+              <input id="filter-from" type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="filter-to">Fecha fin</label>
+              <input id="filter-to" type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} />
+            </div>
+            <button className="button button-secondary" type="button" onClick={() => { setStateFilter(''); setDateFrom(toDateInput(-1)); setDateTo(toDateInput(2)) }}>
+              Restablecer
+            </button>
+          </div>
+        )}
         columns={[
           { key: 'id_appointments', label: 'Cita' },
           { key: 'fecha_hora', label: 'Fecha y hora', render: (value) => value ? formatDate(String(value)) : '—' },
@@ -193,7 +251,8 @@ export function AppointmentsPage() {
       {feedback && <div className="notice notice-success patient-feedback" role="status">{feedback}</div>}
 
       {canManage && formOpen && (
-        <div className="panel user-form-panel patient-form-panel" id="appointment-form">
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) closeForm() }}>
+        <div className="panel user-form-panel patient-form-panel modal-dialog" id="appointment-form" role="dialog" aria-modal="true" aria-label={editing ? 'Modificar cita' : 'Crear una cita'}>
           <div className="user-form-header">
             <div>
               <span className="eyebrow">{editing ? 'REPROGRAMAR CITA' : 'AGENDA CLÍNICA'}</span>
@@ -310,6 +369,7 @@ export function AppointmentsPage() {
               </button>
             </div>
           </form>
+        </div>
         </div>
       )}
     </section>

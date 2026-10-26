@@ -13,6 +13,7 @@ import { IngresoPage } from '../pages/assistant/IngresoPage'
 import { AllergiesPage } from '../pages/assistant/AllergiesPage'
 import { MyPatientsPage } from '../pages/doctor/MyPatientsPage'
 import { MedicalHistoryPage } from '../pages/doctor/MedicalHistoryPage'
+import { ConsultPage } from '../pages/doctor/ConsultPage'
 
 export function AppRoutes() {
   return (
@@ -50,6 +51,9 @@ export function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute permission="medical_history.view" />}>
             <Route path="/doctor/history" element={<MedicalHistoryPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission="consultations.view" />}>
+            <Route path="/doctor/consult" element={<ConsultPage />} />
           </Route>
         </Route>
       </Route>

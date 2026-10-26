@@ -12,6 +12,7 @@ interface ResourceTableProps<T> {
   actions?: (row: Row) => ReactNode
   headerAction?: ReactNode
   pageSize?: number
+  filters?: ReactNode
 }
 
 function rowsFrom<T>(value: T | null): Row[] {
@@ -40,6 +41,7 @@ export function ResourceTable<T>({
   actions,
   headerAction,
   pageSize,
+  filters,
 }: ResourceTableProps<T>) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -71,6 +73,7 @@ export function ResourceTable<T>({
         </div>
       </div>
       <div className="panel">
+        {filters}
         <div className="table-toolbar">
           <div>
             <strong>{filteredRows.length}</strong>
