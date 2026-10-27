@@ -1,4 +1,4 @@
-import { ClinicalRecordsPage } from './MedicalHistoryPage'
+import { ClinicalRecordsPage } from './ClinicalRecordsPage'
 
 export function ConsultPage() {
   return <ClinicalRecordsPage access={{

@@ -43,6 +43,41 @@ function countTodayConfirmedPatients(value: unknown): number | null {
   return patients.size
 }
 
+const AGENDA_HOURS = Array.from({ length: 12 }, (_, index) => index + 7)
+
+interface AgendaItem { id: number; time: string; patient: string; state: string }
+
+function buildAgenda(appointmentsData: unknown, patientsData: unknown): Map<number, AgendaItem[]> {
+  const slots = new Map<number, AgendaItem[]>()
+  if (!Array.isArray(appointmentsData)) return slots
+  const names = new Map<number, string>()
+  if (Array.isArray(patientsData)) {
+    for (const item of patientsData) {
+      const p = item as { id_patients?: number; nom_patients?: string; ape_patients?: string }
+      if (p.id_patients != null) names.set(Number(p.id_patients), `${p.nom_patients ?? ''} ${p.ape_patients ?? ''}`.trim())
+    }
+  }
+  const today = new Date().toDateString()
+  const sorted = appointmentsData
+    .map((item) => item as { id_appointments?: number; id_patients?: number; fecha_hora?: string; nom_estado?: string })
+    .filter((a) => a.fecha_hora && !/CANCELAD/i.test(String(a.nom_estado)))
+    .map((a) => ({ a, date: new Date(a.fecha_hora as string) }))
+    .filter(({ date }) => !Number.isNaN(date.getTime()) && date.toDateString() === today)
+    .sort((x, y) => x.date.getTime() - y.date.getTime())
+  for (const { a, date } of sorted) {
+    const hour = Math.min(Math.max(date.getHours(), AGENDA_HOURS[0]), AGENDA_HOURS[AGENDA_HOURS.length - 1])
+    const list = slots.get(hour) ?? []
+    list.push({
+      id: Number(a.id_appointments),
+      time: date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }),
+      patient: names.get(Number(a.id_patients)) || `Paciente #${a.id_patients}`,
+      state: String(a.nom_estado ?? ''),
+    })
+    slots.set(hour, list)
+  }
+  return slots
+}
+
 export function DashboardPage() {
   const { user, hasPermission } = useAuth()
   const canViewPatients = hasPermission('patients.view')
@@ -50,6 +85,7 @@ export function DashboardPage() {
   const canViewAppointments = hasPermission('appointments.view')
   const patients = useResource<unknown>('/patients/', canViewPatients)
   const appointments = useResource<unknown>('/appointments/', canViewAppointments)
+  const agendaSlots = buildAgenda(appointments.data, patients.data)
   const name = user?.nombre || user?.apellido || 'Equipo clínico'
   const hasErrors = (canViewPatients && patients.error) || (canViewAppointments && appointments.error)
   const quickLinks = [
@@ -95,12 +131,30 @@ export function DashboardPage() {
             ))}
           </div>
         </div>
-        <div className="panel care-panel">
-          <div className="care-icon">✦</div>
-          <span className="eyebrow">CLÍNICA SOFTWARE</span>
-          <h2>Una atención que conecta</h2>
-          <p>Organiza la información y acompaña cada etapa del cuidado de tus pacientes.</p>
-          <div className="care-line"><span>Tu equipo clínico, más cerca</span><span aria-hidden="true">→</span></div>
+        <div className="panel agenda-panel">
+          <div className="panel-heading"><div><h2>Agenda de hoy</h2><p>Franjas horarias y pacientes asignados.</p></div><span className="panel-heading-icon">▦</span></div>
+          {!canViewAppointments ? (
+            <p className="agenda-empty">No tienes permiso para ver la agenda.</p>
+          ) : (
+            <div className="agenda-list">
+              {AGENDA_HOURS.map((hour) => {
+                const slot = agendaSlots.get(hour) ?? []
+                return (
+                  <div className="agenda-row" key={hour}>
+                    <span className="agenda-hour">{String(hour).padStart(2, '0')}:00</span>
+                    <div className="agenda-events">
+                      {slot.length === 0 ? <span className="agenda-free">Libre</span> : slot.map((item) => (
+                        <div className="agenda-event" key={item.id}>
+                          <strong>{item.time} · {item.patient}</strong>
+                          <small>{item.state}</small>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </section>
