@@ -19,9 +19,16 @@ interface PatientRecord {
   telefono?: string
   email?: string
   direccion?: string
-  eps?: string
+  nit_entidad?: number | null
+  nom_entidad?: string | null
   contacto_emergencia?: string
   discapacidad?: boolean | null
+}
+
+interface EntityRecord {
+  nit: number
+  nom_entidad: string
+  activo: boolean | null
 }
 
 interface EditablePatientRecord extends PatientRecord {
@@ -72,7 +79,7 @@ interface PatientFormState {
   telefono: string
   email: string
   direccion: string
-  eps: string
+  nit_entidad: string
   contacto_emergencia: string
   discapacidad: boolean
 }
@@ -87,7 +94,7 @@ const initialForm: PatientFormState = {
   telefono: '',
   email: '',
   direccion: '',
-  eps: '',
+  nit_entidad: '',
   contacto_emergencia: '',
   discapacidad: false,
 }
@@ -117,7 +124,7 @@ function editablePatientFromRow(row: Record<string, unknown>): EditablePatientRe
     telefono: typeof row.telefono === 'string' ? row.telefono : '',
     email: typeof row.email === 'string' ? row.email : '',
     direccion: typeof row.direccion === 'string' ? row.direccion : '',
-    eps: typeof row.eps === 'string' ? row.eps : '',
+    nit_entidad: typeof row.nit_entidad === 'number' ? row.nit_entidad : null,
     contacto_emergencia: typeof row.contacto_emergencia === 'string' ? row.contacto_emergencia : '',
     discapacidad: row.discapacidad === true,
   }
@@ -131,6 +138,7 @@ export function PatientsPage() {
   const resource = useResource<PatientRecord[] | { items?: PatientRecord[] }>('/patients/')
   const sexos = useResource<SexoRecord[]>('/sexos/', canEditPatientRecords)
   const documents = useResource<DocumentRecord[]>('/documents/', canEditPatientRecords)
+  const entities = useResource<EntityRecord[]>('/entities/', canEditPatientRecords)
   const [form, setForm] = useState<PatientFormState>(initialForm)
   const [editingPatient, setEditingPatient] = useState<EditablePatientRecord | null>(null)
   const [formOpen, setFormOpen] = useState(false)
@@ -143,6 +151,10 @@ export function PatientsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  // Solo entidades activas; se conserva la actual del paciente aunque esté inactiva.
+  const entityOptions = (entities.data ?? []).filter(
+    (entity) => entity.activo === true || String(entity.nit) === form.nit_entidad,
+  )
 
   function updateField(field: keyof PatientFormState, value: string | boolean) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -168,7 +180,7 @@ export function PatientsPage() {
       telefono: patient.telefono ?? '',
       email: patient.email ?? '',
       direccion: patient.direccion ?? '',
-      eps: patient.eps ?? '',
+      nit_entidad: patient.nit_entidad == null ? '' : String(patient.nit_entidad),
       contacto_emergencia: patient.contacto_emergencia ?? '',
       discapacidad: patient.discapacidad === true,
     })
@@ -260,7 +272,7 @@ export function PatientsPage() {
       telefono: form.telefono.trim() || null,
       email: form.email.trim() || null,
       direccion: form.direccion.trim() || null,
-      eps: form.eps.trim() || null,
+      nit_entidad: form.nit_entidad ? Number(form.nit_entidad) : null,
       contacto_emergencia: form.contacto_emergencia.trim() || null,
       discapacidad: form.discapacidad,
     }
@@ -309,7 +321,7 @@ export function PatientsPage() {
           { key: 'telefono', label: 'Teléfono' },
           { key: 'email', label: 'Correo electrónico' },
           { key: 'direccion', label: 'Dirección' },
-          { key: 'eps', label: 'EPS' },
+          { key: 'nom_entidad', label: 'Entidad' },
           { key: 'contacto_emergencia', label: 'Contacto de emergencia' },
           {
             key: 'activo',
@@ -359,22 +371,20 @@ export function PatientsPage() {
             <button
               className="button button-primary"
               type="button"
-              aria-expanded={formOpen}
+              aria-haspopup="dialog"
               aria-controls="patient-create-form"
               disabled={csvSubmitting}
               onClick={() => {
-                if (formOpen) closeForm()
-                else {
-                  closeCSVImport()
-                  setFormOpen(true)
-                  setEditingPatient(null)
-                }
+                closeCSVImport()
+                setForm(initialForm)
+                setEditingPatient(null)
+                setFormOpen(true)
                 setSubmitError(null)
                 setSuccessMessage(null)
               }}
             >
-              <span aria-hidden="true">{formOpen ? '−' : '+'}</span>
-              {formOpen ? (editingPatient ? 'Cancelar edición' : 'Cancelar alta') : 'Nuevo paciente'}
+              <span aria-hidden="true">+</span>
+              Nuevo paciente
             </button>
           </>
         ) : undefined}
@@ -489,7 +499,8 @@ export function PatientsPage() {
       )}
 
       {canEditPatientRecords && formOpen && (
-        <div className="panel user-form-panel patient-form-panel" id="patient-create-form">
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) closeForm() }}>
+        <div className="panel user-form-panel patient-form-panel modal-dialog" id="patient-create-form" role="dialog" aria-modal="true" aria-label={editingPatient ? 'Editar paciente' : 'Registrar nuevo paciente'}>
           <div className="user-form-header">
             <div>
               <span className="eyebrow">{editingPatient ? 'EDICIÓN DE PACIENTE' : 'ALTA DE PACIENTE'}</span>
@@ -554,8 +565,11 @@ export function PatientsPage() {
                 <input id="patient-email" name="email" type="email" value={form.email} onChange={(event) => updateField('email', event.target.value)} />
               </div>
               <div className="field">
-                <label htmlFor="patient-eps">EPS</label>
-                <input id="patient-eps" name="eps" value={form.eps} onChange={(event) => updateField('eps', event.target.value)} />
+                <label htmlFor="patient-entity">Entidad</label>
+                <select id="patient-entity" name="nit_entidad" value={form.nit_entidad} onChange={(event) => updateField('nit_entidad', event.target.value)} disabled={entities.loading || Boolean(entities.error)}>
+                  <option value="">Sin entidad</option>
+                  {entityOptions.map((entity) => <option key={entity.nit} value={entity.nit}>{entity.nom_entidad}</option>)}
+                </select>
               </div>
               <div className="field">
                 <label htmlFor="patient-address">Dirección</label>
@@ -599,6 +613,7 @@ export function PatientsPage() {
               <button className="button button-secondary" type="button" onClick={closeForm} disabled={submitting}>Cancelar</button>
             </div>
           </form>
+        </div>
         </div>
       )}
     </section>

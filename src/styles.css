@@ -5,7 +5,6 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   font-optical-sizing: auto;
   font-weight: 400;
   --navy: #193b66;
@@ -117,6 +116,12 @@ tbody tr:hover { background: #fbfcfe; }
 .clinical-form-panel .user-form-header p, .clinical-detail-heading p, .clinical-edit-form .user-form-header p { margin: 7px 0 0; color: #75849a; font-size: 11px; line-height: 1.6; }
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; overflow-y: auto; background: rgba(15, 28, 48, .55); }
 .modal-dialog { width: 100%; max-width: 760px; margin: 0 auto; box-shadow: 0 24px 60px rgba(15, 28, 48, .35); }
+.clinical-detail-panel.modal-dialog, .clinical-form-panel.modal-dialog { max-height: calc(100vh - 64px); overflow-y: auto; }
+.clinical-detail-panel.modal-dialog .clinical-detail-heading { position: sticky; top: 0; z-index: 3; margin: -22px -20px 20px; padding: 22px 20px 14px; border-bottom: 1px solid #edf0f5; background: #fff; }
+.clinical-form-panel.modal-dialog .clinical-create-heading { position: sticky; top: 0; z-index: 3; margin: -22px -20px 20px; padding: 22px 20px 14px; border-bottom: 1px solid #edf0f5; background: #fff; }
+.clinical-create-heading p.clinical-patient-summary { margin-top: 10px; color: #46566b; font-weight: 600; }
+.status-modal-backdrop { z-index: 110; }
+.status-modal-dialog { max-width: 460px; margin-top: 8vh; }
 .allergy-banner { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
 .table-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px; }
 .table-filters .field { min-width: 160px; }

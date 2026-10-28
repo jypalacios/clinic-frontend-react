@@ -9,6 +9,8 @@ interface PatientOption {
   ced_patients: string
   nom_patients: string
   ape_patients: string
+  edad: number
+  nom_sexo: string
 }
 
 const DILATION_ALERT_MS = 20 * 60_000
@@ -18,7 +20,9 @@ interface AllergyInfo {
   nom_tipo_alergia?: string | null
   activo: boolean
 }
-const SCHEDULED_STATES = ['PROGRAMADA', 'EN SALA DE ESPERA', 'CONFIRMADA']
+const WAITING_ROOM_STATE = 'EN SALA DE ESPERA'
+const ATTENDED_STATE = 'ATENDIDA'
+const SCHEDULED_STATES = ['PROGRAMADA', WAITING_ROOM_STATE, 'CONFIRMADA']
 
 interface DoctorAppointment {
   id_appointments: number
@@ -165,10 +169,15 @@ export function ClinicalRecordsPage({
   const [entryRecordId, setEntryRecordId] = useState<number | null>(null)
   const [correctionEntry, setCorrectionEntry] = useState<ClinicalEntry | null>(null)
   const [patientId, setPatientId] = useState('')
+  const selectedPatient = assignedPatients.find((patient) => patient.id_patients === Number(patientId))
   const [entryForm, setEntryForm] = useState<EntryForm>(emptyEntry)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [statusAppointment, setStatusAppointment] = useState<DoctorAppointment | null>(null)
+  const [newStatus, setNewStatus] = useState(WAITING_ROOM_STATE)
+  const [statusSubmitting, setStatusSubmitting] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
   const createPanelRef = useRef<HTMLDivElement>(null)
   const detailPanelRef = useRef<HTMLDivElement>(null)
 
@@ -199,7 +208,37 @@ export function ClinicalRecordsPage({
   ) : null
 
   const entryModalOpen = Boolean(access.createInModal) && Boolean(selectedRecord)
-  const anyModalOpen = modalOpen || entryModalOpen
+  const statusModalOpen = statusAppointment !== null
+  const anyModalOpen = modalOpen || entryModalOpen || statusModalOpen
+
+  function openStatusModal(appointment: DoctorAppointment) {
+    setStatusAppointment(appointment)
+    setNewStatus(appointment.nom_estado)
+    setStatusError(null)
+    setNotice(null)
+  }
+
+  function closeStatusModal() {
+    setStatusAppointment(null)
+    setStatusError(null)
+  }
+
+  async function changeAppointmentStatus(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!statusAppointment || statusAppointment.nom_estado !== WAITING_ROOM_STATE || newStatus !== ATTENDED_STATE) return
+    setStatusSubmitting(true)
+    setStatusError(null)
+    try {
+      await apiRequest(`/appointments/${statusAppointment.id_appointments}/finaliza`, { method: 'PUT' })
+      setNotice(`La cita #${statusAppointment.id_appointments} quedó como ${ATTENDED_STATE}.`)
+      closeStatusModal()
+      appointments.reload()
+    } catch (reason) {
+      setStatusError(getErrorMessage(reason, 'No fue posible cambiar el estado de la cita.'))
+    } finally {
+      setStatusSubmitting(false)
+    }
+  }
 
   function closeDetail() {
     setSelectedRecord(null)
@@ -227,8 +266,9 @@ export function ClinicalRecordsPage({
   useEffect(() => {
     if (!anyModalOpen) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || submitting) return
-      if (modalOpen) closeCreate()
+      if (event.key !== 'Escape' || submitting || statusSubmitting) return
+      if (statusModalOpen) closeStatusModal()
+      else if (modalOpen) closeCreate()
       else if (entryRecordId !== null) resetEntryForm()
       else closeDetail()
     }
@@ -239,7 +279,7 @@ export function ClinicalRecordsPage({
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [anyModalOpen, modalOpen, submitting, entryRecordId])
+  }, [anyModalOpen, modalOpen, statusModalOpen, submitting, statusSubmitting, entryRecordId])
 
   function resetEntryForm() {
     setEntryRecordId(null)
@@ -274,6 +314,10 @@ export function ClinicalRecordsPage({
 
   async function createHistory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!(Number(patientId) > 0)) {
+      setError('Seleccione un paciente desde sus citas programadas.')
+      return
+    }
     const submitter = (event.nativeEvent as SubmitEvent).submitter
     const finalize = submitter?.getAttribute('data-finalize') === 'true'
     const appointment = finalize ? appointmentToFinalize() : undefined
@@ -467,7 +511,17 @@ export function ClinicalRecordsPage({
           description="Citas asignadas a tu agenda, ordenadas por fecha."
           resource={scheduledAppointments}
           columns={[
-            { key: 'id_appointments', label: 'Cita' },
+            { key: 'id_appointments', label: 'Cita', render: (value, row) => (
+              <button
+                className="text-button"
+                type="button"
+                aria-haspopup="dialog"
+                aria-label={`Cambiar estado de la cita ${String(value)}`}
+                onClick={() => openStatusModal(row as unknown as DoctorAppointment)}
+              >
+                {String(value)}
+              </button>
+            ) },
             { key: 'paciente', label: 'Paciente', render: (value, row) => (
               <button
                 className="text-button"
@@ -531,7 +585,7 @@ export function ClinicalRecordsPage({
         emptyMessage={access.filterToScheduledPatients
           ? 'No hay historias clínicas de pacientes con citas programadas.'
           : `No hay ${access.pluralEntityName} disponibles.`}
-        headerAction={canCreate ? (
+        headerAction={canCreate && !access.createInModal ? (
           <button className="button button-primary" type="button" onClick={() => {
             setCreateOpen((open) => !open)
             setError(null)
@@ -581,30 +635,42 @@ export function ClinicalRecordsPage({
           aria-label={access.createInModal ? `Nueva ${access.entityName}` : undefined}
         >
           {allergyBanner}
-          <div className="user-form-header">
-            <span className="eyebrow">NUEVA {access.entityName.toLocaleUpperCase('es-CO')}</span>
-            <h2>Registrar {access.entityName} y primera atención</h2>
-            <p>{access.createDescription}</p>
+          <div className="user-form-header clinical-create-heading">
+            <div>
+              <span className="eyebrow">NUEVA {access.entityName.toLocaleUpperCase('es-CO')}</span>
+              <h2>Registrar {access.entityName} y primera atención</h2>
+              <p>{access.createDescription}</p>
+              {selectedPatient && (
+                <p className="clinical-patient-summary">
+                  Paciente: {selectedPatient.nom_patients} {selectedPatient.ape_patients}
+                  {' · '}Identificación: {selectedPatient.ced_patients}
+                  {' · '}Edad: {selectedPatient.edad} {selectedPatient.edad === 1 ? 'año' : 'años'}
+                  {' · '}Género: {selectedPatient.nom_sexo}
+                </p>
+              )}
+            </div>
           </div>
           {patients.error && <div className="notice notice-error" role="alert"><span>No se pudieron cargar los pacientes: {patients.error}</span><button type="button" className="text-button" onClick={patients.reload}>Reintentar</button></div>}
           {error && access.createInModal && <div className="notice notice-error" role="alert"><strong>Error.</strong><span>{error}</span></div>}
           <form className="user-form" onSubmit={createHistory}>
-            <div className="field">
-              <label htmlFor="history-patient">Paciente</label>
-              <select id="history-patient" value={patientId} onChange={(event) => setPatientId(event.target.value)}               required disabled={patientOptionsLoading || Boolean(patients.error) || !assignedPatients.length}>
-                              <option value="">{assignedPatients.length || patientOptionsLoading ? 'Seleccione un paciente' : 'No tienes pacientes con cita asignada'}</option>
-                              {assignedPatients.map((patient) => (
-                  <option key={patient.id_patients} value={patient.id_patients}>
-                    {patient.ced_patients} · {patient.nom_patients} {patient.ape_patients}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!access.createInModal && (
+              <div className="field">
+                <label htmlFor="history-patient">Paciente</label>
+                <select id="history-patient" value={patientId} onChange={(event) => setPatientId(event.target.value)} required disabled={patientOptionsLoading || Boolean(patients.error) || !assignedPatients.length}>
+                  <option value="">{assignedPatients.length || patientOptionsLoading ? 'Seleccione un paciente' : 'No tienes pacientes con cita asignada'}</option>
+                  {assignedPatients.map((patient) => (
+                    <option key={patient.id_patients} value={patient.id_patients}>
+                      {patient.ced_patients} · {patient.nom_patients} {patient.ape_patients}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {entryFields(entryForm, updateEntry, 'initial')}
             <div className="user-form-actions">
-              <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !assignedPatients.length}>{submitting ? 'Guardando…' : `Crear ${access.entityName}`}</button>
+              <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : `Crear ${access.entityName}`}</button>
               {access.createInModal && (
-                <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !assignedPatients.length || !appointmentToFinalize()}>
+                <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient || !appointmentToFinalize()}>
                   Finalizar consulta
                 </button>
               )}
@@ -612,6 +678,48 @@ export function ClinicalRecordsPage({
             </div>
           </form>
         </div>
+        </div>
+      )}
+
+      {statusAppointment && (
+        <div className="modal-backdrop status-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !statusSubmitting) closeStatusModal() }}>
+          <div className="panel user-form-panel modal-dialog status-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="appointment-status-title">
+            <div className="user-form-header">
+              <span className="eyebrow">ESTADO DE LA CITA</span>
+              <h2 id="appointment-status-title">Cita #{statusAppointment.id_appointments} — {statusAppointment.paciente ?? 'Paciente'}</h2>
+              <p>Fecha y hora: {formatDate(statusAppointment.fecha_hora)}</p>
+            </div>
+            {statusError && <div className="notice notice-error" role="alert"><strong>Error.</strong><span>{statusError}</span></div>}
+            {statusAppointment.nom_estado !== WAITING_ROOM_STATE && (
+              <div className="notice notice-warning" role="note">
+                <span>Solo se puede cambiar a {ATTENDED_STATE} una cita que está {WAITING_ROOM_STATE.toLocaleLowerCase('es-CO')}. Estado actual: {statusAppointment.nom_estado}.</span>
+              </div>
+            )}
+            <form className="user-form" onSubmit={changeAppointmentStatus}>
+              <div className="field">
+                <label htmlFor="appointment-new-status">Estado</label>
+                <select
+                  id="appointment-new-status"
+                  value={newStatus}
+                  onChange={(event) => setNewStatus(event.target.value)}
+                  disabled={statusSubmitting || statusAppointment.nom_estado !== WAITING_ROOM_STATE}
+                >
+                  <option value={statusAppointment.nom_estado}>{statusAppointment.nom_estado}</option>
+                  {statusAppointment.nom_estado === WAITING_ROOM_STATE && <option value={ATTENDED_STATE}>{ATTENDED_STATE}</option>}
+                </select>
+              </div>
+              <div className="user-form-actions">
+                <button className="button button-secondary" type="button" onClick={closeStatusModal} disabled={statusSubmitting}>Cancelar</button>
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  disabled={statusSubmitting || statusAppointment.nom_estado !== WAITING_ROOM_STATE || newStatus !== ATTENDED_STATE}
+                >
+                  {statusSubmitting ? 'Guardando…' : 'Guardar estado'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -633,7 +741,12 @@ export function ClinicalRecordsPage({
             <div>
               <span className="eyebrow">{access.entityName.toLocaleUpperCase('es-CO')} #{selectedRecord.id_clinic}</span>
               <h2>{selectedPatientName}</h2>
-              <p>Identificación {selectedRecord.patient.ced_patients} · Tratante: {selectedRecord.doctor.nom_doctors} {selectedRecord.doctor.ape_doctors}</p>
+              <p>
+                Identificación {selectedRecord.patient.ced_patients}
+                {' · '}Edad: {selectedRecord.patient.edad} {selectedRecord.patient.edad === 1 ? 'año' : 'años'}
+                {' · '}Género: {selectedRecord.patient.nom_sexo}
+                {' · '}Tratante: {selectedRecord.doctor.nom_doctors} {selectedRecord.doctor.ape_doctors}
+              </p>
             </div>
             <button className="button button-secondary" type="button" onClick={closeDetail}>Cerrar</button>
           </div>

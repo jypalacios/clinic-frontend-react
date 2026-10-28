@@ -12,6 +12,7 @@ const navigation = [
   { to: '/assistant/appointments', label: 'Citas', icon: '▦', permission: 'appointments.view' },
   { to: '/assistant/ingreso', label: 'Ingreso', icon: '⇥', permission: 'appointments.manage' },
   { to: '/assistant/allergies', label: 'Alergias', icon: '✱', anyPermissions: ['allergy_types.view', 'allergies.view'] },
+  { to: '/assistant/entities', label: 'Entidades', icon: '▣', permission: 'entities.view' },
   { to: '/doctor/patients', label: 'Mis pacientes', icon: '♧', permission: 'my_patients.view' },
   { to: '/doctor/history', label: 'Historia clínica', icon: '▤', permission: 'medical_history.view' },
   { to: '/doctor/consult', label: 'Consultas', icon: '☷', permission: 'consultations.view' },

@@ -8,7 +8,7 @@ interface PatientRecord {
   ape_patients?: string
   telefono?: string
   email?: string
-  eps?: string
+  nom_entidad?: string
 }
 
 export function MyPatientsPage() {
@@ -19,6 +19,6 @@ export function MyPatientsPage() {
     { key: 'ape_patients', label: 'Apellido' },
     { key: 'telefono', label: 'Teléfono' },
     { key: 'email', label: 'Correo electrónico' },
-    { key: 'eps', label: 'EPS' },
+    { key: 'nom_entidad', label: 'Entidad' },
   ]} emptyMessage="No hay pacientes para mostrar." />
 }

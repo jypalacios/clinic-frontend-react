@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { apiRequest } from '../../api/client'
 import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
@@ -65,6 +65,20 @@ export function IngresoPage() {
     setError(null)
   }
 
+  useEffect(() => {
+    if (!editing) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !submitting) closeForm()
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [editing, submitting])
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!editing) return
@@ -113,7 +127,13 @@ export function IngresoPage() {
           const appointment = row as unknown as AppointmentRecord
           return (
             <div className="table-actions">
-              <button className="action-button action-button-edit" type="button" onClick={() => startIngreso(appointment)}>
+              <button
+                className="action-button action-button-edit"
+                type="button"
+                aria-haspopup="dialog"
+                aria-controls="ingreso-form"
+                onClick={() => startIngreso(appointment)}
+              >
                 {appointment.fec_ingreso ? 'Editar ingreso' : 'Dar ingreso'}
               </button>
             </div>
@@ -125,57 +145,59 @@ export function IngresoPage() {
       {feedback && <div className="notice notice-success patient-feedback" role="status">{feedback}</div>}
 
       {editing && (
-        <div className="panel user-form-panel patient-form-panel" id="ingreso-form">
-          <div className="user-form-header">
-            <div>
-              <span className="eyebrow">INGRESO DE CITA</span>
-              <h2>Cita #{editing.id_appointments} — {editing.paciente ?? 'Paciente'}</h2>
+        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) closeForm() }}>
+          <div className="panel user-form-panel patient-form-panel modal-dialog" id="ingreso-form" role="dialog" aria-modal="true" aria-labelledby="ingreso-form-title">
+            <div className="user-form-header">
+              <div>
+                <span className="eyebrow">INGRESO DE CITA</span>
+                <h2 id="ingreso-form-title">Cita #{editing.id_appointments} — {editing.paciente ?? 'Paciente'}</h2>
+              </div>
             </div>
+            {error && <div className="notice notice-error" role="alert">{error}</div>}
+            <form className="user-form" onSubmit={handleSubmit}>
+              <div className="user-form-grid">
+                <div className="field">
+                  <label htmlFor="ingreso-fec-ingreso">Fecha y hora de ingreso</label>
+                  <input
+                    id="ingreso-fec-ingreso"
+                    type="datetime-local"
+                    value={form.fec_ingreso}
+                    onChange={(event) => setForm((current) => ({ ...current, fec_ingreso: event.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="ingreso-fec-dilatacion">Fecha y hora de dilatación</label>
+                  <input
+                    id="ingreso-fec-dilatacion"
+                    type="datetime-local"
+                    value={form.fec_dilatacion}
+                    min={form.fec_ingreso}
+                    onChange={(event) => setForm((current) => ({ ...current, fec_dilatacion: event.target.value }))}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="ingreso-prioridad">Prioridad</label>
+                  <select
+                    id="ingreso-prioridad"
+                    value={form.prioridad ? 'true' : 'false'}
+                    onChange={(event) => setForm((current) => ({ ...current, prioridad: event.target.value === 'true' }))}
+                  >
+                    <option value="false">Normal</option>
+                    <option value="true">Prioritaria</option>
+                  </select>
+                </div>
+              </div>
+              <div className="user-form-actions">
+                <button className="button button-secondary" type="button" onClick={closeForm} disabled={submitting}>
+                  Cancelar
+                </button>
+                <button className="button button-primary" type="submit" disabled={submitting}>
+                  {submitting ? 'Guardando…' : 'Guardar ingreso'}
+                </button>
+              </div>
+            </form>
           </div>
-          {error && <div className="notice notice-error" role="alert">{error}</div>}
-          <form className="user-form" onSubmit={handleSubmit}>
-            <div className="user-form-grid">
-              <div className="field">
-                <label htmlFor="ingreso-fec-ingreso">Fecha y hora de ingreso</label>
-                <input
-                  id="ingreso-fec-ingreso"
-                  type="datetime-local"
-                  value={form.fec_ingreso}
-                  onChange={(event) => setForm((current) => ({ ...current, fec_ingreso: event.target.value }))}
-                  required
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="ingreso-fec-dilatacion">Fecha y hora de dilatación</label>
-                <input
-                  id="ingreso-fec-dilatacion"
-                  type="datetime-local"
-                  value={form.fec_dilatacion}
-                  min={form.fec_ingreso}
-                  onChange={(event) => setForm((current) => ({ ...current, fec_dilatacion: event.target.value }))}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="ingreso-prioridad">Prioridad</label>
-                <select
-                  id="ingreso-prioridad"
-                  value={form.prioridad ? 'true' : 'false'}
-                  onChange={(event) => setForm((current) => ({ ...current, prioridad: event.target.value === 'true' }))}
-                >
-                  <option value="false">Normal</option>
-                  <option value="true">Prioritaria</option>
-                </select>
-              </div>
-            </div>
-            <div className="user-form-actions">
-              <button className="button button-secondary" type="button" onClick={closeForm} disabled={submitting}>
-                Cancelar
-              </button>
-              <button className="button button-primary" type="submit" disabled={submitting}>
-                {submitting ? 'Guardando…' : 'Guardar ingreso'}
-              </button>
-            </div>
-          </form>
         </div>
       )}
     </section>
