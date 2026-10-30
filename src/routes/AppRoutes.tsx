@@ -7,6 +7,7 @@ import { UsersPage } from '../pages/admin/UsersPage'
 import { RolesPage } from '../pages/admin/RolesPage'
 import { DoctorsPage } from '../pages/admin/DoctorsPage'
 import { AuditPage } from '../pages/admin/AuditPage'
+import { CupsPage } from '../pages/admin/CupsPage'
 import { PatientsPage } from '../pages/assistant/PatientsPage'
 import { AppointmentsPage } from '../pages/assistant/AppointmentsPage'
 import { IngresoPage } from '../pages/assistant/IngresoPage'
@@ -15,6 +16,7 @@ import { EntitiesPage } from '../pages/assistant/EntitiesPage'
 import { MyPatientsPage } from '../pages/doctor/MyPatientsPage'
 import { MedicalHistoryPage } from '../pages/doctor/MedicalHistoryPage'
 import { ConsultPage } from '../pages/doctor/ConsultPage'
+import { ConsultStatePage } from '../pages/doctor/ConsultStatePage'
 
 export function AppRoutes() {
   return (
@@ -34,6 +36,9 @@ export function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute permission="audit.view" />}>
             <Route path="/admin/audit" element={<AuditPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission="cups.view" />}>
+            <Route path="/admin/cups" element={<CupsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission="patients.view" />}>
             <Route path="/assistant/patients" element={<PatientsPage />} />
@@ -58,6 +63,7 @@ export function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute permission="consultations.view" />}>
             <Route path="/doctor/consult" element={<ConsultPage />} />
+            <Route path="/doctor/consult-state/:patientId" element={<ConsultStatePage />} />
           </Route>
         </Route>
       </Route>

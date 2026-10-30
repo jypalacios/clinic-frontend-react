@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   font-family: 'Segoe UI', sans-serif;
   color: #202c3c;
   background: #f5f7fb;
@@ -294,3 +294,75 @@ tbody tr:hover { background: #fbfcfe; }
   .clinical-field-wide { grid-column: auto; }
   .clinical-detail-heading, .clinical-entry-heading { align-items: flex-start; flex-direction: column; }
 }
+
+/* ConsultState: escala tipográfica uniforme (título / texto / etiqueta) */
+.consult-state {
+  --cs-title: 17px;
+  --cs-text: 11px;
+  --cs-label: 10px;
+  display: grid;
+  gap: 16px;
+  font-size: var(--cs-text);
+}
+.consult-state > .button { justify-self: start; }
+.consult-state .panel { padding: 20px 24px; }
+.consult-state .clinical-form-panel,
+.consult-state .clinical-detail-panel { margin-top: 0; }
+
+.consult-state .button,
+.consult-state .text-button,
+.consult-state .notice,
+.consult-state .field input,
+.consult-state .field select,
+.consult-state .field textarea,
+.consult-state .user-form-header p,
+.consult-state .clinical-entry,
+.consult-state .clinical-entry-fields dd,
+.consult-state .clinical-entry-heading strong,
+.consult-state .consult-patient-facts dd { font-size: var(--cs-text); }
+
+.consult-state .eyebrow,
+.consult-state .field label,
+.consult-state .field small,
+.consult-state .action-button,
+.consult-state .clinical-entry-heading span,
+.consult-state .clinical-entry-fields dt,
+.consult-state .consult-patient-facts dt { font-size: var(--cs-label); }
+
+.consult-state .user-form-header h2,
+.consult-state .consult-patient-card h1 { font-size: var(--cs-title); }
+
+.consult-state .button { min-height: 38px; padding: 0 16px; }
+.consult-state .field select { min-height: 38px; }
+.consult-state .field select[multiple] { padding: 4px; }
+.consult-state .field small { color: #75849a; }
+.consult-state .clinical-entry { padding: 14px 16px; line-height: 1.5; }
+.consult-state .clinical-entry-heading strong { font-weight: 600; }
+.consult-state .allergy-banner { margin-bottom: 0; }
+
+.consult-patient-card h1 { margin: 0 0 14px; color: #2b4060; font-family: Manrope, sans-serif; line-height: 1.25; }
+.consult-patient-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px 22px; margin: 0; }
+.consult-patient-facts > div { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid #cfe0f3; }
+.consult-patient-facts dt { color: #77869a; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+.consult-patient-facts dd { margin: 0; color: #2f425b; font-weight: 600; }
+
+.patient-cups-card .clinical-entry-list { margin: 0; padding: 0; list-style: none; }
+.patient-cups-card .clinical-entry { color: #46566b; }
+.patient-cups-card .clinical-entry strong { color: #2b4060; }
+
+@media (max-width: 720px) {
+  .consult-state .panel { padding: 16px; }
+}
+
+
+.cup-picker { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.cup-picker select[multiple] { height: 100%; min-height: 150px; }
+.cup-selected { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid #e3e9ef; border-radius: 7px; background: #f8fafc; }
+.cup-selected-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #2b4060; }
+.cup-selected-empty { color: #75849a; }
+.cup-selected ul { display: grid; gap: 6px; max-height: 150px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.cup-selected li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid #e1e8f0; border-radius: 6px; color: #46566b; background: #fff; }
+.cup-selected li b { color: #2b4060; }
+.cup-remove { flex: none; width: 22px; height: 22px; border: 0; border-radius: 50%; color: #8a4a4a; background: #f7e6e6; font-size: 14px; line-height: 1; cursor: pointer; }
+.cup-remove:hover { background: #f0cccc; }
+@media (max-width: 720px) { .cup-picker { grid-template-columns: 1fr; } }

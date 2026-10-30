@@ -8,6 +8,7 @@ const navigation = [
   { to: '/admin/roles', label: 'Roles y permisos', icon: '⚿', permission: 'roles.manage' },
   { to: '/admin/doctors', label: 'Médicos y profesionales', icon: '✚', anyPermissions: ['doctors.view', 'specialties.view'] },
   { to: '/admin/audit', label: 'Auditoría', icon: '◷', permission: 'audit.view' },
+  { to: '/admin/cups', label: 'CUPS / Órdenes', icon: '☰', permission: 'cups.view' },
   { to: '/assistant/patients', label: 'Gestión de pacientes', icon: '♧', permission: 'patients.view' },
   { to: '/assistant/appointments', label: 'Citas', icon: '▦', permission: 'appointments.view' },
   { to: '/assistant/ingreso', label: 'Ingreso', icon: '⇥', permission: 'appointments.manage' },

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useResource } from '../api/hooks'
@@ -45,9 +46,14 @@ function countTodayConfirmedPatients(value: unknown): number | null {
 
 const AGENDA_HOURS = Array.from({ length: 12 }, (_, index) => index + 7)
 
-interface AgendaItem { id: number; time: string; patient: string; state: string }
+interface AgendaItem { id: number; time: string; patient: string; doctor: string; state: string }
 
-function buildAgenda(appointmentsData: unknown, patientsData: unknown): Map<number, AgendaItem[]> {
+function toDateInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function buildAgenda(appointmentsData: unknown, patientsData: unknown, selectedDate: string): Map<number, AgendaItem[]> {
   const slots = new Map<number, AgendaItem[]>()
   if (!Array.isArray(appointmentsData)) return slots
   const names = new Map<number, string>()
@@ -57,12 +63,11 @@ function buildAgenda(appointmentsData: unknown, patientsData: unknown): Map<numb
       if (p.id_patients != null) names.set(Number(p.id_patients), `${p.nom_patients ?? ''} ${p.ape_patients ?? ''}`.trim())
     }
   }
-  const today = new Date().toDateString()
   const sorted = appointmentsData
-    .map((item) => item as { id_appointments?: number; id_patients?: number; fecha_hora?: string; nom_estado?: string })
+    .map((item) => item as { id_appointments?: number; id_patients?: number; id_doctors?: number; medico?: string | null; fecha_hora?: string; nom_estado?: string })
     .filter((a) => a.fecha_hora && !/CANCELAD/i.test(String(a.nom_estado)))
     .map((a) => ({ a, date: new Date(a.fecha_hora as string) }))
-    .filter(({ date }) => !Number.isNaN(date.getTime()) && date.toDateString() === today)
+    .filter(({ date }) => !Number.isNaN(date.getTime()) && toDateInputValue(date) === selectedDate)
     .sort((x, y) => x.date.getTime() - y.date.getTime())
   for (const { a, date } of sorted) {
     const hour = Math.min(Math.max(date.getHours(), AGENDA_HOURS[0]), AGENDA_HOURS[AGENDA_HOURS.length - 1])
@@ -71,6 +76,7 @@ function buildAgenda(appointmentsData: unknown, patientsData: unknown): Map<numb
       id: Number(a.id_appointments),
       time: date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }),
       patient: names.get(Number(a.id_patients)) || `Paciente #${a.id_patients}`,
+      doctor: a.medico || `Médico #${a.id_doctors}`,
       state: String(a.nom_estado ?? ''),
     })
     slots.set(hour, list)
@@ -85,7 +91,8 @@ export function DashboardPage() {
   const canViewAppointments = hasPermission('appointments.view')
   const patients = useResource<unknown>('/patients/', canViewPatients)
   const appointments = useResource<unknown>('/appointments/', canViewAppointments)
-  const agendaSlots = buildAgenda(appointments.data, patients.data)
+  const [agendaDate, setAgendaDate] = useState(() => toDateInputValue(new Date()))
+  const agendaSlots = buildAgenda(appointments.data, patients.data, agendaDate || toDateInputValue(new Date()))
   const name = user?.nombre || user?.apellido || 'Equipo clínico'
   const hasErrors = (canViewPatients && patients.error) || (canViewAppointments && appointments.error)
   const quickLinks = [
@@ -132,7 +139,12 @@ export function DashboardPage() {
           </div>
         </div>
         <div className="panel agenda-panel">
-          <div className="panel-heading"><div><h2>Agenda de hoy</h2><p>Franjas horarias y pacientes asignados.</p></div><span className="panel-heading-icon">▦</span></div>
+          <div className="panel-heading"><div><h2>{agendaDate === toDateInputValue(new Date()) ? 'Agenda de hoy' : 'Agenda del día'}</h2><p>Franjas horarias, pacientes y médicos asignados.</p></div><span className="panel-heading-icon">▦</span></div>
+          <label className="agenda-filter" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+            <span>Fecha</span>
+            <input type="date" value={agendaDate} onChange={(event) => setAgendaDate(event.target.value)} />
+            {agendaDate !== toDateInputValue(new Date()) && <button type="button" onClick={() => setAgendaDate(toDateInputValue(new Date()))}>Hoy</button>}
+          </label>
           {!canViewAppointments ? (
             <p className="agenda-empty">No tienes permiso para ver la agenda.</p>
           ) : (
@@ -146,6 +158,7 @@ export function DashboardPage() {
                       {slot.length === 0 ? <span className="agenda-free">Libre</span> : slot.map((item) => (
                         <div className="agenda-event" key={item.id}>
                           <strong>{item.time} · {item.patient}</strong>
+                          <small>Médico: {item.doctor}</small>
                           <small>{item.state}</small>
                         </div>
                       ))}

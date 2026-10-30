@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { apiRequest } from '../../api/client'
 import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
 import { useAuth } from '../../auth/AuthContext'
+import { useNavigate } from 'react-router-dom'
 
 interface PatientOption {
   id_patients: number
@@ -61,6 +62,20 @@ interface ClinicalRecord {
   entries: ClinicalEntry[]
 }
 
+interface CupOption {
+  id_cup: number
+  codigo: string
+  nombre: string
+}
+
+interface PatientCup {
+  id_cup_patient: number
+  id_cup: number
+  codigo: string
+  nombre: string
+  fec_creacion: string | null
+}
+
 interface EntryForm {
   motivo_consulta: string
   examen_fisico: string
@@ -110,14 +125,21 @@ export interface ClinicalRecordsAccess {
   filterToScheduledPatients?: boolean
   appointmentPatientAction?: boolean
   createInModal?: boolean
+  // Ruta de la página que reemplaza los popups; recibe el id del paciente.
+  statePath?: string
 }
 
 export function ClinicalRecordsPage({
   access,
+  focusPatientId,
 }: {
   access: ClinicalRecordsAccess
+  focusPatientId?: number
 }) {
-  const { role, hasPermission } = useAuth()
+  const navigate = useNavigate()
+  const pageMode = focusPatientId !== undefined
+  const asModal = Boolean(access.createInModal) && !pageMode
+  const { user, role, hasPermission } = useAuth()
   const canCreate = role === 'doctor' && hasPermission(access.createPermission)
   const canEdit = role === 'doctor' && hasPermission(access.editPermission)
   const canWrite = canCreate || canEdit
@@ -170,7 +192,71 @@ export function ClinicalRecordsPage({
   const [correctionEntry, setCorrectionEntry] = useState<ClinicalEntry | null>(null)
   const [patientId, setPatientId] = useState('')
   const selectedPatient = assignedPatients.find((patient) => patient.id_patients === Number(patientId))
-  const [entryForm, setEntryForm] = useState<EntryForm>(emptyEntry)
+  const [entryForm, setEntryFormState] = useState<EntryForm>(emptyEntry)
+  const [cupIds, setCupIds] = useState<number[]>([])
+  const cups = useResource<CupOption[]>(
+    '/clinical-records/cups',
+    Boolean(access.createInModal) && canWrite,
+  )
+  const patientCups = useResource<PatientCup[]>(
+    `/clinical-records/patients/${focusPatientId ?? 0}/cups`,
+    pageMode,
+  )
+  const patientCupsCard = pageMode ? (
+    <div className="panel patient-cups-card" aria-label="CUPS / Órdenes del paciente">
+      <div className="user-form-header">
+        <span className="eyebrow">CUPS / ÓRDENES</span>
+        <h2>CUPS asignados al paciente</h2>
+      </div>
+      {patientCups.loading ? (
+        <div className="notice" role="status">Consultando CUPS…</div>
+      ) : patientCups.error ? (
+        <div className="notice notice-error" role="alert">
+          <span>No se pudieron consultar los CUPS: {patientCups.error}</span>
+          <button type="button" className="text-button" onClick={patientCups.reload}>Reintentar</button>
+        </div>
+      ) : (patientCups.data ?? []).length === 0 ? (
+        <p>El paciente no tiene CUPS / órdenes registrados.</p>
+      ) : (
+        <ul className="clinical-entry-list">
+          {(patientCups.data ?? []).map((item) => (
+            <li className="clinical-entry" key={item.id_cup_patient}>
+              <strong>{item.codigo}</strong> · {item.nombre}
+              {item.fec_creacion ? ` — ${formatDate(item.fec_creacion)}` : ''}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  ) : null
+
+  const headerPatient = selectedRecord?.patient ?? selectedPatient
+  const headerDoctor = selectedRecord
+    ? `${selectedRecord.doctor.nom_doctors} ${selectedRecord.doctor.ape_doctors}`
+    : [user?.nombre, user?.apellido].filter(Boolean).join(' ') || '—'
+  const patientHeaderCard = pageMode ? (
+    <div className="panel consult-patient-card">
+      {headerPatient ? (
+        <>
+          <span className="eyebrow">PACIENTE</span>
+          <h1>{headerPatient.nom_patients} {headerPatient.ape_patients}</h1>
+          <dl className="consult-patient-facts">
+            <div><dt>Identificación</dt><dd>{headerPatient.ced_patients}</dd></div>
+            <div><dt>Edad</dt><dd>{headerPatient.edad} {headerPatient.edad === 1 ? 'año' : 'años'}</dd></div>
+            <div><dt>Género</dt><dd>{headerPatient.nom_sexo}</dd></div>
+            <div><dt>Médico tratante</dt><dd>{headerDoctor}</dd></div>
+          </dl>
+        </>
+      ) : (
+        <div className="notice" role="status">Cargando información del paciente…</div>
+      )}
+    </div>
+  ) : null
+  // Cualquier reemplazo completo del formulario también reinicia los CUPS elegidos.
+  function setEntryForm(value: EntryForm) {
+    setEntryFormState(value)
+    setCupIds([])
+  }
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -181,15 +267,17 @@ export function ClinicalRecordsPage({
   const createPanelRef = useRef<HTMLDivElement>(null)
   const detailPanelRef = useRef<HTMLDivElement>(null)
 
-  const modalOpen = Boolean(access.createInModal) && createOpen && canCreate
-  const allergyPatientId = access.createInModal
-    ? (modalOpen ? Number(patientId) : selectedRecord?.id_patients ?? 0)
-    : 0
+  const modalOpen = asModal && createOpen && canCreate
+  const allergyPatientId = pageMode
+    ? focusPatientId ?? 0
+    : access.createInModal
+      ? (modalOpen ? Number(patientId) : selectedRecord?.id_patients ?? 0)
+      : 0
   const allergies = useResource<AllergyInfo[]>(
     `/allergies/?patient_id=${allergyPatientId}`,
     allergyPatientId > 0,
   )
-  const allergyBanner = access.createInModal && allergyPatientId > 0 ? (
+  const allergyBanner = (access.createInModal || pageMode) && allergyPatientId > 0 ? (
     allergies.loading ? (
       <div className="notice allergy-banner" role="status">Consultando alergias…</div>
     ) : allergies.error ? (
@@ -207,7 +295,7 @@ export function ClinicalRecordsPage({
     })()
   ) : null
 
-  const entryModalOpen = Boolean(access.createInModal) && Boolean(selectedRecord)
+  const entryModalOpen = asModal && Boolean(selectedRecord)
   const statusModalOpen = statusAppointment !== null
   const anyModalOpen = modalOpen || entryModalOpen || statusModalOpen
 
@@ -252,6 +340,36 @@ export function ClinicalRecordsPage({
     setError(null)
   }
 
+  const pageInitialized = useRef(false)
+  const entryAutoOpened = useRef(false)
+  // Abre el formulario de evolución una sola vez cuando la historia activa está lista y hay permiso.
+  useEffect(() => {
+    if (!pageMode || entryAutoOpened.current || !selectedRecord) return
+    if (canCreate && selectedRecord.activo) {
+      entryAutoOpened.current = true
+      if (entryRecordId === null) startNewEntry(selectedRecord)
+    }
+  })
+  useEffect(() => {
+    if (!pageMode || !access.statePath) return
+    if (!pageInitialized.current) {
+      if (resource.loading || appointments.loading) return
+      const existing = resource.data?.find((record) => record.id_patients === focusPatientId)
+      const hasAppointment = assignedPatientIds.has(focusPatientId)
+      if (existing) setSelectedRecord(existing)
+      else if (canCreate && hasAppointment) {
+        setPatientId(String(focusPatientId))
+        setCreateOpen(true)
+      } else {
+        navigate('/doctor/consult', { replace: true })
+        return
+      }
+      pageInitialized.current = true
+      return
+    }
+    if (!createOpen && !selectedRecord) navigate('/doctor/consult', { replace: true })
+  })
+
   useEffect(() => {
     if (!access.appointmentPatientAction || anyModalOpen) return
     const target = createOpen ? createPanelRef.current : selectedRecord ? detailPanelRef.current : null
@@ -289,15 +407,18 @@ export function ClinicalRecordsPage({
   }
 
   function updateEntry(field: keyof EntryForm, value: string) {
-    setEntryForm((current) => ({ ...current, [field]: value }))
+    setEntryFormState((current) => ({ ...current, [field]: value }))
     setError(null)
     setNotice(null)
   }
 
   function payloadFromEntry() {
-    return Object.fromEntries(
-      Object.entries(entryForm).map(([key, value]) => [key, value.trim() || null]),
-    )
+    return {
+      ...Object.fromEntries(
+        Object.entries(entryForm).map(([key, value]) => [key, value.trim() || null]),
+      ),
+      id_cups: cupIds,
+    }
   }
 
   function appointmentToFinalize(patientIdValue: number = Number(patientId)): DoctorAppointment | undefined {
@@ -353,6 +474,7 @@ export function ClinicalRecordsPage({
       setEntryForm(emptyEntry)
       setCreateOpen(false)
       resource.reload()
+      patientCups.reload()
     } catch (reason) {
       setPatientId('')
       setEntryForm(emptyEntry)
@@ -392,6 +514,7 @@ export function ClinicalRecordsPage({
         : 'Evolución agregada correctamente.')
       resetEntryForm()
       resource.reload()
+      patientCups.reload()
     } catch (reason) {
       setError(getErrorMessage(reason, 'No fue posible guardar la nota clínica.'))
       setSubmitting(false)
@@ -460,6 +583,10 @@ export function ClinicalRecordsPage({
 
   function openAppointmentPatient(patientId: number) {
     if (!Number.isInteger(patientId) || patientId <= 0) return
+    if (access.statePath) {
+      navigate(`${access.statePath}/${patientId}`)
+      return
+    }
     const existingRecord = resource.data?.find((record) => record.id_patients === patientId)
     setError(null)
     setNotice(null)
@@ -477,6 +604,65 @@ export function ClinicalRecordsPage({
     setCreateOpen(true)
   }
 
+  function cupSelector(prefix: string): ReactNode {
+    if (!access.createInModal) return null
+    const selectedCups = (cups.data ?? []).filter((cup) => cupIds.includes(cup.id_cup))
+    return (
+      <div className="field clinical-field-wide">
+        <label htmlFor={`${prefix}-cups`}>CUPS / Órdenes</label>
+        <div className="cup-picker">
+          <select
+            id={`${prefix}-cups`}
+            multiple
+            size={6}
+            value={cupIds.map(String)}
+            disabled={cups.loading || Boolean(cups.error)}
+            onChange={(event) => {
+              setCupIds(Array.from(event.target.selectedOptions, (option) => Number(option.value)))
+              setError(null)
+            }}
+          >
+            {(cups.data ?? []).map((cup) => (
+              <option key={cup.id_cup} value={cup.id_cup}>{cup.codigo} · {cup.nombre}</option>
+            ))}
+          </select>
+          <div className="cup-selected" aria-live="polite">
+            <div className="cup-selected-header">
+              <strong>Órdenes seleccionadas ({selectedCups.length})</strong>
+              {selectedCups.length > 0 && (
+                <button type="button" className="text-button" onClick={() => setCupIds([])}>Limpiar</button>
+              )}
+            </div>
+            {selectedCups.length === 0 ? (
+              <span className="cup-selected-empty">Aún no has seleccionado órdenes.</span>
+            ) : (
+              <ul>
+                {selectedCups.map((cup) => (
+                  <li key={cup.id_cup}>
+                    <span><b>{cup.codigo}</b> · {cup.nombre}</span>
+                    <button
+                      type="button"
+                      className="cup-remove"
+                      aria-label={`Quitar ${cup.codigo}`}
+                      onClick={() => setCupIds((current) => current.filter((id) => id !== cup.id_cup))}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        <small>
+          {cups.error
+            ? `No se pudieron cargar los CUPS: ${cups.error}`
+            : 'Mantén Ctrl (o Cmd) para seleccionar varios CUPS.'}
+        </small>
+      </div>
+    )
+  }
+
   const entryFormOpen = Boolean(selectedRecord) && entryRecordId !== null && (correctionEntry ? canEdit : canCreate)
   const entryFormNode = (
     <form className="user-form clinical-edit-form" onSubmit={saveEntry}>
@@ -485,7 +671,7 @@ export function ClinicalRecordsPage({
         <h2>{correctionEntry ? 'Registrar una rectificación' : 'Agregar atención'}</h2>
         <p>Los registros clínicos son inmutables. Al editar, el sistema conserva la nota original y guarda esta como una nueva rectificación.</p>
       </div>
-      {entryFields(entryForm, updateEntry, 'edit')}
+      {entryFields(entryForm, updateEntry, 'edit', cupSelector('edit'))}
       <div className="user-form-actions">
         <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
         {access.createInModal && !correctionEntry && selectedRecord && (
@@ -504,8 +690,16 @@ export function ClinicalRecordsPage({
 
     
   return (
-    <section>
-      {role === 'doctor' && access.appointmentPatientAction && (
+    <section className={pageMode ? 'consult-state' : undefined}>
+      {pageMode && (
+        <button className="button button-secondary" type="button" onClick={() => navigate('/doctor/consult')}>
+          ← Volver a consultas
+        </button>
+      )}
+      {patientHeaderCard}
+      {pageMode && allergyBanner}
+      {pageMode && patientCupsCard}
+      {!pageMode && role === 'doctor' && access.appointmentPatientAction && (
         <ResourceTable
           title="Mis citas programadas"
           description="Citas asignadas a tu agenda, ordenadas por fecha."
@@ -561,7 +755,7 @@ export function ClinicalRecordsPage({
           emptyMessage="No tienes citas programadas."
         />
       )}
-      <ResourceTable
+      {!pageMode && <ResourceTable
         title={access.title}
         description={canWrite
           ? `Consulta las ${access.pluralEntityName} de tus pacientes, registra atenciones y rectifica notas mediante una nueva entrada.`
@@ -569,9 +763,29 @@ export function ClinicalRecordsPage({
         resource={visibleResource}
         columns={[
           { key: 'id_clinic', label: 'Historia' },
-          { key: 'patient', label: 'Paciente', render: (value) => {
+          { key: 'patient', label: 'Paciente', render: (value, row) => {
             const patient = value as PatientOption | undefined
-            return patient ? `${patient.nom_patients} ${patient.ape_patients}` : '—'
+            if (!patient) return '—'
+            const name = `${patient.nom_patients} ${patient.ape_patients}`
+            if (!access.createInModal) return name
+            return (
+              <button
+                className="text-button"
+                type="button"
+                aria-haspopup="dialog"
+                aria-label={`Ver historia clínica de ${name}`}
+                onClick={() => {
+                  if (access.statePath) {
+                    navigate(`${access.statePath}/${(row as unknown as ClinicalRecord).id_patients}`)
+                    return
+                  }
+                  setSelectedRecord(row as unknown as ClinicalRecord)
+                  resetEntryForm()
+                }}
+              >
+                {name}
+              </button>
+            )
           } },
           { key: 'patient', label: 'Identificación', render: (value) => (value as PatientOption | undefined)?.ced_patients ?? '—' },
           { key: 'doctor', label: 'Médico tratante', render: (value) => {
@@ -582,6 +796,7 @@ export function ClinicalRecordsPage({
           { key: 'activo', label: 'Estado', render: (value) => value === true ? 'Activa' : 'Archivada' },
           { key: 'total_entradas', label: 'Notas', render: (value) => Number(value ?? 0) },
         ]}
+        pageSize={5}
         emptyMessage={access.filterToScheduledPatients
           ? 'No hay historias clínicas de pacientes con citas programadas.'
           : `No hay ${access.pluralEntityName} disponibles.`}
@@ -617,30 +832,31 @@ export function ClinicalRecordsPage({
             </div>
           )
         }}
-      />
+      />}
 
-      {error && !anyModalOpen && <div className="notice notice-error clinical-feedback" role="alert"><strong>Error.</strong><span>{error}</span></div>}
+      {error && !anyModalOpen && !pageMode && <div className="notice notice-error clinical-feedback" role="alert"><strong>Error.</strong><span>{error}</span></div>}
       {notice && <div className="notice notice-success clinical-feedback" role="status">{notice}</div>}
 
       {createOpen && canCreate && (
         <div
-          className={access.createInModal ? 'modal-backdrop' : undefined}
-          onMouseDown={access.createInModal ? (event) => { if (event.target === event.currentTarget) closeCreate() } : undefined}
+          className={asModal ? 'modal-backdrop' : undefined}
+          onMouseDown={asModal ? (event) => { if (event.target === event.currentTarget) closeCreate() } : undefined}
         >
         <div
-          className={`panel user-form-panel clinical-form-panel${access.createInModal ? ' modal-dialog' : ''}`}
+          className={`panel user-form-panel clinical-form-panel${asModal ? ' modal-dialog' : ''}`}
           ref={createPanelRef}
-          role={access.createInModal ? 'dialog' : undefined}
-          aria-modal={access.createInModal ? true : undefined}
-          aria-label={access.createInModal ? `Nueva ${access.entityName}` : undefined}
+          role={asModal ? 'dialog' : undefined}
+          aria-modal={asModal ? true : undefined}
+          aria-label={asModal ? `Nueva ${access.entityName}` : undefined}
         >
-          {allergyBanner}
+          {!pageMode && allergyBanner}
+          {!pageMode && patientCupsCard}
           <div className="user-form-header clinical-create-heading">
             <div>
               <span className="eyebrow">NUEVA {access.entityName.toLocaleUpperCase('es-CO')}</span>
               <h2>Registrar {access.entityName} y primera atención</h2>
               <p>{access.createDescription}</p>
-              {selectedPatient && (
+              {selectedPatient && !pageMode && (
                 <p className="clinical-patient-summary">
                   Paciente: {selectedPatient.nom_patients} {selectedPatient.ape_patients}
                   {' · '}Identificación: {selectedPatient.ced_patients}
@@ -666,7 +882,7 @@ export function ClinicalRecordsPage({
                 </select>
               </div>
             )}
-            {entryFields(entryForm, updateEntry, 'initial')}
+            {entryFields(entryForm, updateEntry, 'initial', cupSelector('initial'))}
             <div className="user-form-actions">
               <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : `Crear ${access.entityName}`}</button>
               {access.createInModal && (
@@ -725,30 +941,33 @@ export function ClinicalRecordsPage({
 
       {selectedRecord && (
         <div
-          className={access.createInModal ? 'modal-backdrop' : undefined}
-          onMouseDown={access.createInModal ? (event) => { if (event.target === event.currentTarget && !submitting) closeDetail() } : undefined}
+          className={asModal ? 'modal-backdrop' : undefined}
+          onMouseDown={asModal ? (event) => { if (event.target === event.currentTarget && !submitting) closeDetail() } : undefined}
         >
         <div
-          className={`panel user-form-panel clinical-detail-panel${access.createInModal ? ' modal-dialog' : ''}`}
+          className={`panel user-form-panel clinical-detail-panel${asModal ? ' modal-dialog' : ''}`}
           ref={detailPanelRef}
-          role={access.createInModal ? 'dialog' : undefined}
-          aria-modal={access.createInModal ? true : undefined}
-          aria-label={access.createInModal ? `${access.entityName} de ${selectedPatientName}` : undefined}
+          role={asModal ? 'dialog' : undefined}
+          aria-modal={asModal ? true : undefined}
+          aria-label={asModal ? `${access.entityName} de ${selectedPatientName}` : undefined}
         >
-          {allergyBanner}
+          {!pageMode && allergyBanner}
+          {!pageMode && patientCupsCard}
           {error && access.createInModal && <div className="notice notice-error" role="alert"><strong>Error.</strong><span>{error}</span></div>}
           <div className="user-form-header clinical-detail-heading">
             <div>
               <span className="eyebrow">{access.entityName.toLocaleUpperCase('es-CO')} #{selectedRecord.id_clinic}</span>
-              <h2>{selectedPatientName}</h2>
+              <h2>{pageMode ? 'Historia clínica' : selectedPatientName}</h2>
+              {!pageMode && (
               <p>
                 Identificación {selectedRecord.patient.ced_patients}
                 {' · '}Edad: {selectedRecord.patient.edad} {selectedRecord.patient.edad === 1 ? 'año' : 'años'}
                 {' · '}Género: {selectedRecord.patient.nom_sexo}
                 {' · '}Tratante: {selectedRecord.doctor.nom_doctors} {selectedRecord.doctor.ape_doctors}
               </p>
+              )}
             </div>
-            <button className="button button-secondary" type="button" onClick={closeDetail}>Cerrar</button>
+            {!pageMode && <button className="button button-secondary" type="button" onClick={closeDetail}>Cerrar</button>}
           </div>
 
           {canCreate && selectedRecord.activo && entryRecordId === null && (
@@ -792,7 +1011,12 @@ export function ClinicalRecordsPage({
   )
 }
 
-function entryFields(form: EntryForm, update: (field: keyof EntryForm, value: string) => void, prefix: string) {
+function entryFields(
+  form: EntryForm,
+  update: (field: keyof EntryForm, value: string) => void,
+  prefix: string,
+  extra?: ReactNode,
+) {
   return (
     <div className="clinical-form-grid">
       <div className="field clinical-field-wide">
@@ -817,8 +1041,8 @@ function entryFields(form: EntryForm, update: (field: keyof EntryForm, value: st
       </div>
       <div className="field clinical-field-wide">
         <label htmlFor={`${prefix}-notes`}>Notas adicionales</label>
-        <textarea id={`${prefix}-notes`} value={form.notas} onChange={(event) => update('notas', event.target.value)} maxLength={20000} rows={3} />
       </div>
+      {extra}
     </div>
   )
 }
