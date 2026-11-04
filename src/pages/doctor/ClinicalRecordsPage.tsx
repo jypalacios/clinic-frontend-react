@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import { apiRequest } from '../../api/client'
 import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
+import { SearchMultiSelect } from '../../components/SearchMultiSelect'
 import { useAuth } from '../../auth/AuthContext'
 import { useNavigate } from 'react-router-dom'
 
@@ -49,6 +50,13 @@ interface ClinicalEntry {
   formulacion: string | null
   notas: string | null
   medico: string
+  diagnosticos?: { id_diag: number; codigo: string; diagnostico: string }[]
+}
+
+interface DiagnosisOption {
+  id_diag: number
+  codigo: string
+  titulo: string
 }
 
 interface ClinicalRecord {
@@ -193,11 +201,10 @@ export function ClinicalRecordsPage({
   const [patientId, setPatientId] = useState('')
   const selectedPatient = assignedPatients.find((patient) => patient.id_patients === Number(patientId))
   const [entryForm, setEntryFormState] = useState<EntryForm>(emptyEntry)
-  const [cupIds, setCupIds] = useState<number[]>([])
-  const cups = useResource<CupOption[]>(
-    '/clinical-records/cups',
-    Boolean(access.createInModal) && canWrite,
-  )
+  const [selectedCups, setSelectedCups] = useState<CupOption[]>([])
+  const [selectedDiags, setSelectedDiags] = useState<DiagnosisOption[]>([])
+  const cupIds = selectedCups.map((cup) => cup.id_cup)
+  const diagIds = selectedDiags.map((diag) => diag.id_diag)
   const patientCups = useResource<PatientCup[]>(
     `/clinical-records/patients/${focusPatientId ?? 0}/cups`,
     pageMode,
@@ -255,7 +262,8 @@ export function ClinicalRecordsPage({
   // Cualquier reemplazo completo del formulario también reinicia los CUPS elegidos.
   function setEntryForm(value: EntryForm) {
     setEntryFormState(value)
-    setCupIds([])
+    setSelectedCups([])
+    setSelectedDiags([])
   }
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -418,6 +426,7 @@ export function ClinicalRecordsPage({
         Object.entries(entryForm).map(([key, value]) => [key, value.trim() || null]),
       ),
       id_cups: cupIds,
+      id_diags: diagIds,
     }
   }
 
@@ -604,62 +613,35 @@ export function ClinicalRecordsPage({
     setCreateOpen(true)
   }
 
-  function cupSelector(prefix: string): ReactNode {
+  function diagSelector(_prefix: string): ReactNode {
     if (!access.createInModal) return null
-    const selectedCups = (cups.data ?? []).filter((cup) => cupIds.includes(cup.id_cup))
     return (
-      <div className="field clinical-field-wide">
-        <label htmlFor={`${prefix}-cups`}>CUPS / Órdenes</label>
-        <div className="cup-picker">
-          <select
-            id={`${prefix}-cups`}
-            multiple
-            size={6}
-            value={cupIds.map(String)}
-            disabled={cups.loading || Boolean(cups.error)}
-            onChange={(event) => {
-              setCupIds(Array.from(event.target.selectedOptions, (option) => Number(option.value)))
-              setError(null)
-            }}
-          >
-            {(cups.data ?? []).map((cup) => (
-              <option key={cup.id_cup} value={cup.id_cup}>{cup.codigo} · {cup.nombre}</option>
-            ))}
-          </select>
-          <div className="cup-selected" aria-live="polite">
-            <div className="cup-selected-header">
-              <strong>Órdenes seleccionadas ({selectedCups.length})</strong>
-              {selectedCups.length > 0 && (
-                <button type="button" className="text-button" onClick={() => setCupIds([])}>Limpiar</button>
-              )}
-            </div>
-            {selectedCups.length === 0 ? (
-              <span className="cup-selected-empty">Aún no has seleccionado órdenes.</span>
-            ) : (
-              <ul>
-                {selectedCups.map((cup) => (
-                  <li key={cup.id_cup}>
-                    <span><b>{cup.codigo}</b> · {cup.nombre}</span>
-                    <button
-                      type="button"
-                      className="cup-remove"
-                      aria-label={`Quitar ${cup.codigo}`}
-                      onClick={() => setCupIds((current) => current.filter((id) => id !== cup.id_cup))}
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-        <small>
-          {cups.error
-            ? `No se pudieron cargar los CUPS: ${cups.error}`
-            : 'Mantén Ctrl (o Cmd) para seleccionar varios CUPS.'}
-        </small>
-      </div>
+      <SearchMultiSelect<DiagnosisOption>
+        label="Diagnósticos (CIE)"
+        endpoint="/clinical-records/diagnoses"
+        selected={selectedDiags}
+        onChange={(items) => { setSelectedDiags(items); setError(null) }}
+        getId={(diag) => diag.id_diag}
+        getCode={(diag) => diag.codigo}
+        getName={(diag) => diag.titulo}
+        emptyText="Aún no has seleccionado diagnósticos."
+      />
+    )
+  }
+
+  function cupSelector(_prefix: string): ReactNode {
+    if (!access.createInModal) return null
+    return (
+      <SearchMultiSelect<CupOption>
+        label="CUPS / Órdenes"
+        endpoint="/clinical-records/cups"
+        selected={selectedCups}
+        onChange={(items) => { setSelectedCups(items); setError(null) }}
+        getId={(cup) => cup.id_cup}
+        getCode={(cup) => cup.codigo}
+        getName={(cup) => cup.nombre}
+        emptyText="Aún no has seleccionado órdenes."
+      />
     )
   }
 
@@ -671,7 +653,7 @@ export function ClinicalRecordsPage({
         <h2>{correctionEntry ? 'Registrar una rectificación' : 'Agregar atención'}</h2>
         <p>Los registros clínicos son inmutables. Al editar, el sistema conserva la nota original y guarda esta como una nueva rectificación.</p>
       </div>
-      {entryFields(entryForm, updateEntry, 'edit', cupSelector('edit'))}
+      {entryFields(entryForm, updateEntry, 'edit', <>{diagSelector('edit')}{cupSelector('edit')}</>)}
       <div className="user-form-actions">
         <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
         {access.createInModal && !correctionEntry && selectedRecord && (
@@ -882,7 +864,7 @@ export function ClinicalRecordsPage({
                 </select>
               </div>
             )}
-            {entryFields(entryForm, updateEntry, 'initial', cupSelector('initial'))}
+            {entryFields(entryForm, updateEntry, 'initial', <>{diagSelector('initial')}{cupSelector('initial')}</>)}
             <div className="user-form-actions">
               <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : `Crear ${access.entityName}`}</button>
               {access.createInModal && (
@@ -994,6 +976,12 @@ export function ClinicalRecordsPage({
                 </div>
                 <dl className="clinical-entry-fields">
                   {entry.examen_fisico && <div><dt>Examen físico</dt><dd>{entry.examen_fisico}</dd></div>}
+                  {(entry.diagnosticos ?? []).length > 0 && (
+                    <div>
+                      <dt>Diagnósticos (CIE)</dt>
+                      <dd>{(entry.diagnosticos ?? []).map((diag) => `${diag.codigo} · ${diag.diagnostico}`).join('; ')}</dd>
+                    </div>
+                  )}
                   {entry.diagnostico && <div><dt>Diagnóstico</dt><dd>{entry.diagnostico}</dd></div>}
                   {entry.plan && <div><dt>Plan</dt><dd>{entry.plan}</dd></div>}
                   {entry.formulacion && <div><dt>Formulación</dt><dd>{entry.formulacion}</dd></div>}

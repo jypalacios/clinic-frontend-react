@@ -360,6 +360,10 @@ tbody tr:hover { background: #fbfcfe; }
 .cup-selected { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid #e3e9ef; border-radius: 7px; background: #f8fafc; }
 .cup-selected-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #2b4060; }
 .cup-selected-empty { color: #75849a; }
+.search-picker { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.search-results { list-style: none; margin: 0; padding: 4px; max-height: 220px; overflow-y: auto; border: 1px solid #d5dce6; border-radius: 8px; background: #fff; }
+.search-results li { padding: 2px 4px; }
+.search-results .text-button { width: 100%; text-align: left; }
 .cup-selected ul { display: grid; gap: 6px; max-height: 150px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
 .cup-selected li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px solid #e1e8f0; border-radius: 6px; color: #46566b; background: #fff; }
 .cup-selected li b { color: #2b4060; }
