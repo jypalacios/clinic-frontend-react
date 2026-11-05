@@ -140,10 +140,10 @@ export function DashboardPage() {
         </div>
         <div className="panel agenda-panel">
           <div className="panel-heading"><div><h2>{agendaDate === toDateInputValue(new Date()) ? 'Agenda de hoy' : 'Agenda del día'}</h2><p>Franjas horarias, pacientes y médicos asignados.</p></div><span className="panel-heading-icon">▦</span></div>
-          <label className="agenda-filter" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+          <label className="agenda-filter">
             <span className="agenda-filter-label">Fecha</span>
-            <input type="date" value={agendaDate} onChange={(event) => setAgendaDate(event.target.value)} />
-            {agendaDate !== toDateInputValue(new Date()) && <button type="button" onClick={() => setAgendaDate(toDateInputValue(new Date()))}>Hoy</button>}
+            <input type="date" className="agenda-filter-input" value={agendaDate} onChange={(event) => setAgendaDate(event.target.value)} />  
+            {agendaDate !== toDateInputValue(new Date()) && (<button type="button" className="button button-secondary agenda-filter-today" onClick={() => setAgendaDate(toDateInputValue(new Date()))}>Hoy</button> )}
           </label>
           {!canViewAppointments ? (
             <p className="agenda-empty">No tienes permiso para ver la agenda.</p>

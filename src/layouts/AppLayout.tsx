@@ -4,16 +4,12 @@ import { Brand } from '../components/Brand'
 
 const navigation = [
   { to: '/dashboard', label: 'Resumen', icon: '⌂' },
-  { to: '/admin/users', label: 'Usuarios', icon: '♙', permission: 'users.view' },
-  { to: '/admin/roles', label: 'Roles y permisos', icon: '⚿', permission: 'roles.manage' },
-  { to: '/admin/doctors', label: 'Médicos y profesionales', icon: '✚', anyPermissions: ['doctors.view', 'specialties.view'] },
+  { to: '/admin/management', label: 'Management', icon: '⚙', anyPermissions: ['entities.view', 'diagnoses.view', 'cups.view', 'doctors.view', 'specialties.view', 'users.view', 'roles.manage'] },
   { to: '/admin/audit', label: 'Auditoría', icon: '◷', permission: 'audit.view' },
-  { to: '/admin/cups', label: 'CUPS / Órdenes', icon: '☰', permission: 'cups.view' },
   { to: '/assistant/patients', label: 'Gestión de pacientes', icon: '♧', permission: 'patients.view' },
   { to: '/assistant/appointments', label: 'Citas', icon: '▦', permission: 'appointments.view' },
   { to: '/assistant/ingreso', label: 'Ingreso', icon: '⇥', permission: 'appointments.manage' },
   { to: '/assistant/allergies', label: 'Alergias', icon: '✱', anyPermissions: ['allergy_types.view', 'allergies.view'] },
-  { to: '/assistant/entities', label: 'Entidades', icon: '▣', permission: 'entities.view' },
   { to: '/doctor/patients', label: 'Mis pacientes', icon: '♧', permission: 'my_patients.view' },
   { to: '/doctor/history', label: 'Historia clínica', icon: '▤', permission: 'medical_history.view' },
   { to: '/doctor/consult', label: 'Consultas', icon: '☷', permission: 'consultations.view' },

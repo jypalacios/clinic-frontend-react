@@ -8,6 +8,8 @@ import { RolesPage } from '../pages/admin/RolesPage'
 import { DoctorsPage } from '../pages/admin/DoctorsPage'
 import { AuditPage } from '../pages/admin/AuditPage'
 import { CupsPage } from '../pages/admin/CupsPage'
+import { DiagnosesPage } from '../pages/admin/DiagnosesPage'
+import { ManagementPage } from '../pages/admin/ManagementPage'
 import { PatientsPage } from '../pages/assistant/PatientsPage'
 import { AppointmentsPage } from '../pages/assistant/AppointmentsPage'
 import { IngresoPage } from '../pages/assistant/IngresoPage'
@@ -25,6 +27,17 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route element={<ProtectedRoute anyPermissions={[
+            'entities.view',
+            'diagnoses.view',
+            'cups.view',
+            'doctors.view',
+            'specialties.view',
+            'users.view',
+            'roles.manage',
+          ]} />}>
+            <Route path="/admin/management" element={<ManagementPage />} />
+          </Route>
           <Route element={<ProtectedRoute permission="users.view" />}>
             <Route path="/admin/users" element={<UsersPage />} />
           </Route>
@@ -39,6 +52,9 @@ export function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute permission="cups.view" />}>
             <Route path="/admin/cups" element={<CupsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission="diagnoses.view" />}>
+            <Route path="/admin/diagnoses" element={<DiagnosesPage />} />
           </Route>
           <Route element={<ProtectedRoute permission="patients.view" />}>
             <Route path="/assistant/patients" element={<PatientsPage />} />

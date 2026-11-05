@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+﻿import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { apiRequest } from '../../api/client'
 import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
@@ -49,6 +49,9 @@ interface ClinicalEntry {
   plan: string | null
   formulacion: string | null
   notas: string | null
+  peso: number | null
+  talle: number | null
+  medidas?: { id_hc_medida: number; id_hc_detalle: number; detalle_medida: string | null; general: string | null; derecho: string | null; izquierdo: string | null }[]
   medico: string
   diagnosticos?: { id_diag: number; codigo: string; diagnostico: string }[]
 }
@@ -91,6 +94,15 @@ interface EntryForm {
   plan: string
   formulacion: string
   notas: string
+  peso: string
+  talle: string
+  medidas: Record<number, { derecho: string; izquierdo: string }>
+}
+
+interface MeasureType {
+  id_hc_detalle: number
+  general: string
+  detalle: string
 }
 
 const emptyEntry: EntryForm = {
@@ -100,6 +112,9 @@ const emptyEntry: EntryForm = {
   plan: '',
   formulacion: '',
   notas: '',
+  peso: '',
+  talle: '',
+  medidas: {},
 }
 
 function entryToForm(entry: ClinicalEntry): EntryForm {
@@ -110,6 +125,11 @@ function entryToForm(entry: ClinicalEntry): EntryForm {
     plan: entry.plan ?? '',
     formulacion: entry.formulacion ?? '',
     notas: entry.notas ?? '',
+    peso: entry.peso != null ? String(entry.peso) : '',
+    talle: entry.talle != null ? String(entry.talle) : '',
+    medidas: Object.fromEntries(
+      (entry.medidas ?? []).map((m) => [m.id_hc_detalle, { derecho: m.derecho ?? '', izquierdo: m.izquierdo ?? '' }]),
+    ),
   }
 }
 
@@ -155,6 +175,7 @@ export function ClinicalRecordsPage({
     && role === 'admin'
     && hasPermission(access.archivePermission)
   const resource = useResource<ClinicalRecord[]>('/clinical-records/')
+  const measureTypes = useResource<MeasureType[]>('/clinical-records/measure-types', canWrite)
   const patients = useResource<PatientOption[]>('/patients/', canCreate)
   const appointments = useResource<DoctorAppointment[]>(
     '/appointments/',
@@ -420,11 +441,33 @@ export function ClinicalRecordsPage({
     setNotice(null)
   }
 
+  function updateMeasure(id: number, eye: 'derecho' | 'izquierdo', value: string) {
+    setEntryFormState((current) => ({
+      ...current,
+      medidas: {
+        ...current.medidas,
+        [id]: { ...(current.medidas[id] ?? { derecho: '', izquierdo: '' }), [eye]: value },
+      },
+    }))
+    setError(null)
+    setNotice(null)
+  }
+
   function payloadFromEntry() {
+    const { peso, talle, medidas, ...text } = entryForm
+    const toNumber = (value: string) => {
+      const parsed = Number(value.trim().replace(',', '.'))
+      return value.trim() && Number.isFinite(parsed) ? parsed : null
+    }
     return {
       ...Object.fromEntries(
-        Object.entries(entryForm).map(([key, value]) => [key, value.trim() || null]),
+        Object.entries(text).map(([key, value]) => [key, (value as string).trim() || null]),
       ),
+      medidas: Object.entries(medidas)
+        .map(([id, m]) => ({ id_hc_detalle: Number(id), derecho: m.derecho.trim() || null, izquierdo: m.izquierdo.trim() || null }))
+        .filter((m) => m.derecho || m.izquierdo),
+      peso: toNumber(peso),
+      talle: toNumber(talle),
       id_cups: cupIds,
       id_diags: diagIds,
     }
@@ -613,6 +656,38 @@ export function ClinicalRecordsPage({
     setCreateOpen(true)
   }
 
+  function measureSelector(prefix: string): ReactNode {
+    const groups = new Map<string, MeasureType[]>()
+    for (const item of measureTypes.data ?? []) {
+      groups.set(item.general, [...(groups.get(item.general) ?? []), item])
+    }
+    return (
+      <>
+        {[...groups.entries()].map(([general, items]) => (
+          <div className="field clinical-field-wide" key={general}>
+            <table className="clinical-measure-table">
+              <thead>
+                <tr><th colSpan={3} className="clinical-measure-title">{general}</th></tr>
+                <tr><th>Medición</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr>
+              </thead>
+              <tbody>
+                {items.map((item) => {
+                  const value = entryForm.medidas[item.id_hc_detalle]
+                  return (
+                    <tr key={item.id_hc_detalle}>
+                      <td>{item.detalle}</td>
+                      <td><input aria-label={`${item.detalle} ojo derecho`} id={`${prefix}-od-${item.id_hc_detalle}`} maxLength={20} value={value?.derecho ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'derecho', event.target.value)} /></td>
+                      <td><input aria-label={`${item.detalle} ojo izquierdo`} id={`${prefix}-oi-${item.id_hc_detalle}`} maxLength={20} value={value?.izquierdo ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'izquierdo', event.target.value)} /></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </>
+    )
+  }
   function diagSelector(_prefix: string): ReactNode {
     if (!access.createInModal) return null
     return (
@@ -653,7 +728,7 @@ export function ClinicalRecordsPage({
         <h2>{correctionEntry ? 'Registrar una rectificación' : 'Agregar atención'}</h2>
         <p>Los registros clínicos son inmutables. Al editar, el sistema conserva la nota original y guarda esta como una nueva rectificación.</p>
       </div>
-      {entryFields(entryForm, updateEntry, 'edit', <>{diagSelector('edit')}{cupSelector('edit')}</>)}
+      {entryFields(entryForm, updateEntry, 'edit', <>{measureSelector('edit')}{diagSelector('edit')}{cupSelector('edit')}</>)}
       <div className="user-form-actions">
         <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
         {access.createInModal && !correctionEntry && selectedRecord && (
@@ -864,7 +939,7 @@ export function ClinicalRecordsPage({
                 </select>
               </div>
             )}
-            {entryFields(entryForm, updateEntry, 'initial', <>{diagSelector('initial')}{cupSelector('initial')}</>)}
+            {entryFields(entryForm, updateEntry, 'initial', <>{measureSelector('initial')}{diagSelector('initial')}{cupSelector('initial')}</>)}
             <div className="user-form-actions">
               <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : `Crear ${access.entityName}`}</button>
               {access.createInModal && (
@@ -975,6 +1050,23 @@ export function ClinicalRecordsPage({
                   )}
                 </div>
                 <dl className="clinical-entry-fields">
+                  {entry.peso != null && <div><dt>Peso</dt><dd>{entry.peso} kg</dd></div>}
+                  {entry.talle != null && <div><dt>Talle</dt><dd>{entry.talle} cm</dd></div>}
+                  {[...new Set((entry.medidas ?? []).map((m) => m.general ?? 'Medidas'))].map((general) => (
+                    <div key={general}>
+                      <dt>{general}</dt>
+                      <dd>
+                        <table className="clinical-measure-table">
+                          <thead><tr><th>Medición</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr></thead>
+                          <tbody>
+                            {(entry.medidas ?? []).filter((m) => (m.general ?? 'Medidas') === general).map((m) => (
+                              <tr key={m.id_hc_medida}><td>{m.detalle_medida}</td><td>{m.derecho ?? '-'}</td><td>{m.izquierdo ?? '-'}</td></tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </dd>
+                    </div>
+                  ))}
                   {entry.examen_fisico && <div><dt>Examen físico</dt><dd>{entry.examen_fisico}</dd></div>}
                   {(entry.diagnosticos ?? []).length > 0 && (
                     <div>
@@ -1012,6 +1104,14 @@ function entryFields(
         <textarea id={`${prefix}-motivo`} value={form.motivo_consulta} onChange={(event) => update('motivo_consulta', event.target.value)} maxLength={10000} required rows={3} />
       </div>
       <div className="field">
+        <label htmlFor={`${prefix}-weight`}>Peso (kg)</label>
+        <input id={`${prefix}-weight`} type="number" inputMode="decimal" min="0" max="1000" step="0.01" value={form.peso} onChange={(event) => update('peso', event.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor={`${prefix}-height`}>Talle (cm)</label>
+        <input id={`${prefix}-height`} type="number" inputMode="decimal" min="0" max="300" step="0.1" value={form.talle} onChange={(event) => update('talle', event.target.value)} />
+      </div>
+      <div className="field">
         <label htmlFor={`${prefix}-exam`}>Examen físico</label>
         <textarea id={`${prefix}-exam`} value={form.examen_fisico} onChange={(event) => update('examen_fisico', event.target.value)} maxLength={20000} rows={3} />
       </div>
@@ -1029,7 +1129,8 @@ function entryFields(
       </div>
       <div className="field clinical-field-wide">
         <label htmlFor={`${prefix}-notes`}>Notas adicionales</label>
-      </div>
+                <textarea id={`${prefix}-notes`} value={form.notas} onChange={(event) => update('notas', event.target.value)} maxLength={20000} rows={3} />
+              </div>
       {extra}
     </div>
   )

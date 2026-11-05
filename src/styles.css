@@ -139,6 +139,11 @@ tbody tr:hover { background: #fbfcfe; }
 .clinical-entry-heading span { color: #78879a; font-size: 10px; }
 .clinical-correction-pill { padding: 5px 8px; border-radius: 999px; color: #715a18 !important; background: #fff4d7; white-space: nowrap; }
 .clinical-entry-fields { display: grid; gap: 12px; margin: 15px 0 0; }
+.clinical-measure-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.clinical-measure-table th, .clinical-measure-table td { border: 1px solid #d5dde8; padding: 6px 10px; text-align: left; }
+.clinical-measure-table thead th { background: #f3f6fa; }
+.clinical-measure-table .clinical-measure-title { text-align: center; font-weight: 700; }
+.clinical-measure-table td input { width: 100%; box-sizing: border-box; }
 .clinical-entry-fields > div { display: grid; gap: 4px; }
 .clinical-entry-fields dt { color: #77869a; font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .clinical-entry-fields dd { margin: 0; color: #46566b; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
@@ -209,7 +214,21 @@ tbody tr:hover { background: #fbfcfe; }
 .quick-link strong { color: #3d4f65; font-size: 10px; }
 .quick-link small { color: #8f9aaa; font-size: 9px; }
 .quick-arrow { margin-left: auto; color: #8a9bb0; font-size: 15px; }
+.management-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.management-link { display: flex; min-height: 92px; align-items: center; gap: 13px; padding: 17px; transition: .18s; }
+.management-link:hover { border-color: #d6e3f1; background: #fafdff; transform: translateY(-1px); }
+.management-link-copy { display: grid; gap: 5px; }
+.management-link-copy strong { color: #3d4f65; font-size: 12px; }
+.management-link-copy small { color: #8f9aaa; font-size: 10px; line-height: 1.5; }
 .agenda-list { display: grid; max-height: 420px; margin-top: 14px; overflow-y: auto; }
+.agenda-filter {  display: flex;  flex-wrap: wrap; align-items: center;  gap: 10px;  margin-bottom: 12px;}
+.agenda-filter-label {  color: #4a5970;            /* igual que .field label */  font-size: 11px;  font-weight: 600;  white-space: nowrap;}
+.agenda-filter-input {  min-height: 38px;  padding: 0 12px;  border: 1px solid #e3e9ef; /* igual que .field input */  border-radius: 7px;  outline: 0;  color: #33465d;  background: #fff;  font-size: 11px;  cursor: pointer;  transition: .18s;}
+.agenda-filter-input:hover {  border-color: #aabed5;     /* mismo hover que .button-secondary */}
+.agenda-filter-input:focus { border-color: #6b9acb;  box-shadow: 0 0 0 3px #5289c31a;}
+.agenda-filter-input::-webkit-calendar-picker-indicator {  cursor: pointer;  opacity: .55;  transition: opacity .18s;}
+.agenda-filter-input::-webkit-calendar-picker-indicator:hover {  opacity: 1;}
+.agenda-filter-today {  min-height: 38px;}
 .agenda-row { display: grid; grid-template-columns: 46px 1fr; gap: 10px; min-height: 38px; padding: 6px 0; border-top: 1px solid #eff2f6; }
 .agenda-hour { color: #8f9aaa; font-size: 10px; font-weight: 700; }
 .agenda-events { display: grid; gap: 5px; }
