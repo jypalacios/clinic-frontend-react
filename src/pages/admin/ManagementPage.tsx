@@ -28,6 +28,12 @@ export function ManagementPage() {
       title: 'Médicos y profesionales',
       text: 'Gestiona el equipo clínico y sus especialidades.',
     },
+    hasPermission('doctors.link_user') && {
+      to: '/admin/doctors',
+      icon: '♙',
+      title: 'Vincular cuentas de usuarios',
+      text: 'Asocia una cuenta activa con rol Médico a su perfil profesional.',
+    },
     hasPermission('users.view') && {
       to: '/admin/users',
       icon: '♙',

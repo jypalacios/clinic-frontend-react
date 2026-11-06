@@ -32,6 +32,7 @@ export function AppRoutes() {
             'diagnoses.view',
             'cups.view',
             'doctors.view',
+            'doctors.link_user',
             'specialties.view',
             'users.view',
             'roles.manage',
@@ -44,7 +45,7 @@ export function AppRoutes() {
           <Route element={<ProtectedRoute permission="roles.manage" />}>
             <Route path="/admin/roles" element={<RolesPage />} />
           </Route>
-          <Route element={<ProtectedRoute anyPermissions={['doctors.view', 'specialties.view']} />}>
+          <Route element={<ProtectedRoute anyPermissions={['doctors.view', 'doctors.link_user', 'specialties.view']} />}>
             <Route path="/admin/doctors" element={<DoctorsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission="audit.view" />}>
