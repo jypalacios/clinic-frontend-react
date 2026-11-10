@@ -34,6 +34,8 @@ Este backend permite:
 
 ## Frontend
 
+Desde Management, Análisis permite seleccionar un tipo de cita y asociarle detalles de historia clínica. La consulta requiere `analysis.view` y la creación o edición requiere `analysis.manage`.
+
 La aplicación web de este proyecto está en la raíz `clinica_frontend/` y utiliza React, TypeScript y Vite. Para iniciar el entorno local desde esa raíz:
 
 ```bash

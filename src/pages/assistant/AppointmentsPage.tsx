@@ -8,8 +8,14 @@ interface AppointmentRecord {
   id_appointments: number
   id_patients: number
   id_doctors: number
+  tipo_appointment: number | null
   fecha_hora: string
   nom_estado: string
+}
+
+interface AppointmentTypeOption {
+  id_tipo_appointment: number
+  nom_tipo_appointment: string
 }
 
 interface PatientOption {
@@ -31,20 +37,23 @@ interface DoctorOption {
 interface AppointmentForm {
   id_patients: string
   id_doctors: string
+  tipo_appointment: string
   fecha_hora: string
   estado: string
 }
 
-const emptyForm: AppointmentForm = { id_patients: '', id_doctors: '', fecha_hora: '', estado: '' }
+const emptyForm: AppointmentForm = { id_patients: '', id_doctors: '', tipo_appointment: '', fecha_hora: '', estado: '' }
 
 function appointmentFromRow(row: Record<string, unknown>): AppointmentRecord | null {
   const id_appointments = Number(row.id_appointments)
   const id_patients = Number(row.id_patients)
   const id_doctors = Number(row.id_doctors)
+  const tipo_appointment = row.tipo_appointment == null ? null : Number(row.tipo_appointment)
   if (
     !Number.isInteger(id_appointments) ||
     !Number.isInteger(id_patients) ||
     !Number.isInteger(id_doctors) ||
+    (tipo_appointment !== null && !Number.isInteger(tipo_appointment)) ||
     typeof row.fecha_hora !== 'string' ||
     typeof row.nom_estado !== 'string'
   ) return null
@@ -52,6 +61,7 @@ function appointmentFromRow(row: Record<string, unknown>): AppointmentRecord | n
     id_appointments,
     id_patients,
     id_doctors,
+    tipo_appointment,
     fecha_hora: row.fecha_hora,
     nom_estado: row.nom_estado,
   }
@@ -83,6 +93,7 @@ export function AppointmentsPage() {
   const allAppointments = useResource<AppointmentRecord[]>('/appointments/')
   const patients = useResource<PatientOption[]>('/patients/', canManage)
   const doctors = useResource<DoctorOption[]>('/doctors/', canManage)
+  const types = useResource<AppointmentTypeOption[]>('/appointments/types')
   const states = useResource<string[]>('/appointments/estados')
   const [stateFilter, setStateFilter] = useState('')
   const [dateFrom, setDateFrom] = useState(() => toDateInput(-1))
@@ -111,6 +122,10 @@ export function AppointmentsPage() {
     patient.id_patients,
     `${patient.nom_patients} ${patient.ape_patients} (${patient.ced_patients})`,
   ]))
+  const appointmentTypeNames = new Map((types.data ?? []).map((type) => [
+    type.id_tipo_appointment,
+    type.nom_tipo_appointment,
+  ]))
   const doctorNames = new Map(activeDoctors.map((doctor) => [
     doctor.id_doctors,
     `${doctor.nom_doctors} ${doctor.ape_doctors}`,
@@ -135,6 +150,7 @@ export function AppointmentsPage() {
     setForm({
       id_patients: String(appointment.id_patients),
       id_doctors: String(appointment.id_doctors),
+      tipo_appointment: appointment.tipo_appointment == null ? '' : String(appointment.tipo_appointment),
       fecha_hora: toLocalInputValue(appointment.fecha_hora),
       estado: appointment.nom_estado,
     })
@@ -159,8 +175,18 @@ export function AppointmentsPage() {
       const fecha_hora = new Date(form.fecha_hora).toISOString()
       const endpoint = editing ? `/appointments/${editing.id_appointments}` : '/appointments/'
       const payload = editing
-        ? { id_doctors: Number(form.id_doctors), fecha_hora, estado: form.estado }
-        : { id_patients: Number(form.id_patients), id_doctors: Number(form.id_doctors), fecha_hora }
+        ? {
+          id_doctors: Number(form.id_doctors),
+          tipo_appointment: Number(form.tipo_appointment),
+          fecha_hora,
+          estado: form.estado,
+        }
+        : {
+          id_patients: Number(form.id_patients),
+          id_doctors: Number(form.id_doctors),
+          tipo_appointment: Number(form.tipo_appointment),
+          fecha_hora,
+        }
       await apiRequest<AppointmentRecord>(endpoint, {
         method: editing ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
@@ -175,8 +201,8 @@ export function AppointmentsPage() {
     }
   }
 
-  const catalogError = patients.error || doctors.error
-  const catalogLoading = patients.loading || doctors.loading
+  const catalogError = patients.error || doctors.error || types.error
+  const catalogLoading = patients.loading || doctors.loading || types.loading
 
   useEffect(() => {
     if (!formOpen) return
@@ -226,6 +252,7 @@ export function AppointmentsPage() {
           { key: 'fecha_hora', label: 'Fecha y hora', render: (value) => value ? formatDate(String(value)) : '—' },
           { key: 'id_patients', label: 'Paciente', render: (value) => patientNames.get(Number(value)) ?? `Paciente #${String(value ?? '')}` },
           { key: 'id_doctors', label: 'Médico', render: (value) => doctorNames.get(Number(value)) ?? `Médico #${String(value ?? '')}` },
+          { key: 'tipo_appointment', label: 'Tipo de cita', render: (value) => appointmentTypeNames.get(Number(value)) ?? '—' },
           { key: 'nom_estado', label: 'Estado' },
           { key: 'discapacidad', label: 'Discapacidad', render: (value) => value === true ? 'Sí' : 'No' },
         ]}
@@ -262,16 +289,16 @@ export function AppointmentsPage() {
 
           {catalogError && (
             <div className="notice notice-error" role="alert">
-              <strong>No se pudieron cargar pacientes o profesionales.</strong>
+              <strong>No se pudieron cargar los catálogos de citas.</strong>
               <span>{catalogError}</span>
-              <button className="text-button" type="button" onClick={() => { patients.reload(); doctors.reload() }}>
+              <button className="text-button" type="button" onClick={() => { patients.reload(); doctors.reload(); types.reload() }}>
                 Intentar de nuevo
               </button>
             </div>
           )}
-          {!catalogLoading && !catalogError && (!activePatients.length || !activeDoctors.length) && (
+          {!catalogLoading && !catalogError && (!activePatients.length || !activeDoctors.length || !types.data?.length) && (
             <div className="notice notice-warning" role="status">
-              Registre al menos un paciente y un médico activo antes de agendar citas.
+              Verifique que existan tipos de cita, un paciente y un médico activo antes de agendar.
             </div>
           )}
           {error && <div className="notice notice-error" role="alert">{error}</div>}
@@ -330,6 +357,23 @@ export function AppointmentsPage() {
                 </select>
               </div>
               <div className="field">
+                <label htmlFor="appointment-type">Tipo de cita</label>
+                <select
+                  id="appointment-type"
+                  value={form.tipo_appointment}
+                  onChange={(event) => updateField('tipo_appointment', event.target.value)}
+                  required
+                  disabled={catalogLoading || Boolean(catalogError) || !types.data?.length}
+                >
+                  <option value="">Seleccione un tipo de cita</option>
+                  {(types.data ?? []).map((type) => (
+                    <option key={type.id_tipo_appointment} value={type.id_tipo_appointment}>
+                      {type.nom_tipo_appointment}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
                 <label htmlFor="appointment-date">Fecha y hora</label>
                 <input
                   id="appointment-date"
@@ -363,7 +407,7 @@ export function AppointmentsPage() {
               <button
                 className="button button-primary"
                 type="submit"
-                disabled={submitting || catalogLoading || Boolean(catalogError) || !activeDoctors.length || (!editing && !activePatients.length)}
+                disabled={submitting || catalogLoading || Boolean(catalogError) || !types.data?.length || !activeDoctors.length || (!editing && !activePatients.length)}
               >
                 {submitting ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear cita'}
               </button>

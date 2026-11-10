@@ -45,7 +45,8 @@ function countTodayConfirmedPatients(value: unknown): number | null {
 
 const AGENDA_HOURS = Array.from({ length: 12 }, (_, index) => index + 7)
 
-interface AgendaItem { id: number; time: string; patient: string; doctor: string; state: string }
+interface AppointmentType { id_tipo_appointment: number; nom_tipo_appointment: string }
+interface AgendaItem { id: number; time: string; patient: string; doctor: string; state: string; typeId: number | null }
 interface AgendaStatus { label: string; count: number; color: string }
 
 const AGENDA_STATUS_COLORS = ['#4d82cc', '#38a883', '#d18a42', '#8667c8', '#d46b73', '#4b9a9c']
@@ -92,7 +93,7 @@ function buildAgenda(appointmentsData: unknown, patientsData: unknown, selectedD
     }
   }
   const sorted = appointmentsData
-    .map((item) => item as { id_appointments?: number; id_patients?: number; id_doctors?: number; medico?: string | null; fecha_hora?: string; nom_estado?: string })
+    .map((item) => item as { id_appointments?: number; id_patients?: number; id_doctors?: number; tipo_appointment?: number | null; medico?: string | null; fecha_hora?: string; nom_estado?: string })
     .filter((a) => a.fecha_hora && !/CANCELAD/i.test(String(a.nom_estado)))
     .map((a) => ({ a, date: new Date(a.fecha_hora as string) }))
     .filter(({ date }) => !Number.isNaN(date.getTime()) && toDateInputValue(date) === selectedDate)
@@ -106,6 +107,7 @@ function buildAgenda(appointmentsData: unknown, patientsData: unknown, selectedD
       patient: names.get(Number(a.id_patients)) || `Paciente #${a.id_patients}`,
       doctor: a.medico || `Médico #${a.id_doctors}`,
       state: String(a.nom_estado ?? ''),
+      typeId: a.tipo_appointment ?? null,
     })
     slots.set(hour, list)
   }
@@ -118,6 +120,8 @@ export function DashboardPage() {
   const canViewAppointments = hasPermission('appointments.view')
   const patients = useResource<unknown>('/patients/', canViewPatients)
   const appointments = useResource<unknown>('/appointments/', canViewAppointments)
+  const appointmentTypes = useResource<AppointmentType[]>('/appointments/types', canViewAppointments)
+  const typeNames = new Map((appointmentTypes.data ?? []).map((type) => [type.id_tipo_appointment, type.nom_tipo_appointment]))
   const [agendaDate, setAgendaDate] = useState(() => toDateInputValue(new Date()))
   const agendaSlots = buildAgenda(appointments.data, patients.data, agendaDate || toDateInputValue(new Date()))
   const agendaStatuses = countAgendaStatuses(agendaSlots)
@@ -200,6 +204,12 @@ export function DashboardPage() {
             <input type="date" className="agenda-filter-input" value={agendaDate} onChange={(event) => setAgendaDate(event.target.value)} />
             {agendaDate !== toDateInputValue(new Date()) && (<button type="button" className="button button-secondary agenda-filter-today" onClick={() => setAgendaDate(toDateInputValue(new Date()))}>Hoy</button>)}
           </label>
+          {canViewAppointments && appointmentTypes.error && (
+            <div className="notice notice-error" role="alert">
+              <span>No fue posible cargar los tipos de cita: {appointmentTypes.error}</span>
+              <button className="text-button" type="button" onClick={appointmentTypes.reload}>Intentar de nuevo</button>
+            </div>
+          )}
           {!canViewAppointments ? (
             <p className="agenda-empty">No tienes permiso para ver la agenda.</p>
           ) : (
@@ -214,6 +224,7 @@ export function DashboardPage() {
                         <div className="agenda-event" key={item.id}>
                           <strong>{item.time} · {item.patient}</strong>
                           <small>Médico: {item.doctor}</small>
+                          <small>Tipo de cita: {item.typeId === null ? 'Sin asignar' : appointmentTypes.loading ? 'Cargando…' : typeNames.get(item.typeId) ?? `Tipo #${item.typeId}`}</small>
                           <small>{item.state}</small>
                         </div>
                       ))}
