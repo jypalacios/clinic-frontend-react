@@ -4,12 +4,11 @@ import { Brand } from '../components/Brand'
 
 const navigation = [
   { to: '/dashboard', label: 'Resumen', icon: '⌂' },
-  { to: '/admin/management', label: 'Management', icon: '⚙', anyPermissions: ['analysis.view', 'entities.view', 'diagnoses.view', 'cups.view', 'doctors.view', 'doctors.link_user', 'specialties.view', 'users.view', 'roles.manage'] },
+  { to: '/admin/management', label: 'Management', icon: '⚙', anyPermissions: ['analysis.view', 'entities.view', 'diagnoses.view', 'cups.view', 'doctors.view', 'doctors.link_user', 'specialties.view', 'users.view', 'roles.manage', 'allergy_types.view', 'allergies.view'] },
   { to: '/admin/audit', label: 'Auditoría', icon: '◷', permission: 'audit.view' },
   { to: '/assistant/patients', label: 'Gestión de pacientes', icon: '♧', permission: 'patients.view' },
   { to: '/assistant/appointments', label: 'Citas', icon: '▦', permission: 'appointments.view' },
   { to: '/assistant/ingreso', label: 'Ingreso', icon: '⇥', permission: 'appointments.manage' },
-  { to: '/assistant/allergies', label: 'Alergias', icon: '✱', anyPermissions: ['allergy_types.view', 'allergies.view'] },
   { to: '/doctor/patients', label: 'Mis pacientes', icon: '♧', permission: 'my_patients.view' },
   { to: '/doctor/history', label: 'Historia clínica', icon: '▤', permission: 'medical_history.view' },
   { to: '/doctor/consult', label: 'Consultas', icon: '☷', permission: 'consultations.view' },

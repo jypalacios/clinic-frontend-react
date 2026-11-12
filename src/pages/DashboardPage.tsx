@@ -49,7 +49,18 @@ interface AppointmentType { id_tipo_appointment: number; nom_tipo_appointment: s
 interface AgendaItem { id: number; time: string; patient: string; doctor: string; state: string; typeId: number | null }
 interface AgendaStatus { label: string; count: number; color: string }
 
-const AGENDA_STATUS_COLORS = ['#4d82cc', '#38a883', '#d18a42', '#8667c8', '#d46b73', '#4b9a9c']
+const AGENDA_STATUS_COLORS: Record<string, { color: string; background: string }> = {
+  PROGRAMADA: { color: '#c85242', background: '#ffebe6' },
+  CONFIRMADA: { color: '#187c4f', background: '#e8f6ed' },
+  'EN SALA DE ESPERA': { color: '#997000', background: '#fff5cc' },
+  ATENDIDA: { color: '#2969b4', background: '#e9f2ff' },
+  CANCELADA: { color: '#bb2936', background: '#ffeaec' },
+  NO_ASISTIO: { color: '#793eb1', background: '#f3eaff' },
+}
+
+function agendaStatusColors(state: string): { color: string; background: string } {
+  return AGENDA_STATUS_COLORS[state.trim().toUpperCase()] ?? { color: '#667788', background: '#f1f3f5' }
+}
 
 function toDateInputValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -62,10 +73,10 @@ function countAgendaStatuses(slots: Map<number, AgendaItem[]>): AgendaStatus[] {
     const status = item.state.trim() || 'Sin estado'
     counts.set(status, (counts.get(status) ?? 0) + 1)
   }
-  return Array.from(counts, ([label, count], index) => ({
+  return Array.from(counts, ([label, count]) => ({
     label,
     count,
-    color: AGENDA_STATUS_COLORS[index % AGENDA_STATUS_COLORS.length],
+    color: agendaStatusColors(label).color,
   }))
 }
 
@@ -94,7 +105,7 @@ function buildAgenda(appointmentsData: unknown, patientsData: unknown, selectedD
   }
   const sorted = appointmentsData
     .map((item) => item as { id_appointments?: number; id_patients?: number; id_doctors?: number; tipo_appointment?: number | null; medico?: string | null; fecha_hora?: string; nom_estado?: string })
-    .filter((a) => a.fecha_hora && !/CANCELAD/i.test(String(a.nom_estado)))
+    .filter((a) => a.fecha_hora)
     .map((a) => ({ a, date: new Date(a.fecha_hora as string) }))
     .filter(({ date }) => !Number.isNaN(date.getTime()) && toDateInputValue(date) === selectedDate)
     .sort((x, y) => x.date.getTime() - y.date.getTime())
@@ -221,7 +232,14 @@ export function DashboardPage() {
                     <span className="agenda-hour">{String(hour).padStart(2, '0')}:00</span>
                     <div className="agenda-events">
                       {slot.length === 0 ? <span className="agenda-free">Libre</span> : slot.map((item) => (
-                        <div className="agenda-event" key={item.id}>
+                        <div
+                          className="agenda-event"
+                          key={item.id}
+                          style={{
+                            borderLeftColor: agendaStatusColors(item.state).color,
+                            backgroundColor: agendaStatusColors(item.state).background,
+                          }}
+                        >
                           <strong>{item.time} · {item.patient}</strong>
                           <small>Médico: {item.doctor}</small>
                           <small>Tipo de cita: {item.typeId === null ? 'Sin asignar' : appointmentTypes.loading ? 'Cargando…' : typeNames.get(item.typeId) ?? `Tipo #${item.typeId}`}</small>

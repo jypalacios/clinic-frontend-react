@@ -38,6 +38,8 @@ export function AppRoutes() {
             'specialties.view',
             'users.view',
             'roles.manage',
+            'allergy_types.view',
+            'allergies.view',
           ]} />}>
             <Route path="/admin/management" element={<ManagementPage />} />
           </Route>

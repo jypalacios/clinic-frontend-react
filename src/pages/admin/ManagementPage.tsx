@@ -28,6 +28,12 @@ export function ManagementPage() {
       title: 'CUPS',
       text: 'Consulta y administra procedimientos y órdenes.',
     },
+    (hasPermission('allergy_types.view') || hasPermission('allergies.view')) && {
+      to: '/assistant/allergies',
+      icon: '✱',
+      title: 'Alergias',
+      text: 'Consulta y administra los tipos de alergia y las alergias de pacientes.',
+    },
     (hasPermission('doctors.view') || hasPermission('specialties.view')) && {
       to: '/admin/doctors',
       icon: '✚',

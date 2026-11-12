@@ -19,7 +19,14 @@ const DILATION_ALERT_MS = 20 * 60_000
 
 interface AllergyInfo {
   id_alergia: number
+  id_tipo_alergia: number | null
   nom_tipo_alergia?: string | null
+  activo: boolean | null
+}
+
+interface AllergyTypeOption {
+  id_tipo_alergia: number
+  nom_tipo_alergia: string
   activo: boolean
 }
 const WAITING_ROOM_STATE = 'EN SALA DE ESPERA'
@@ -29,12 +36,20 @@ const SCHEDULED_STATES = ['PROGRAMADA', WAITING_ROOM_STATE, 'CONFIRMADA']
 interface DoctorAppointment {
   id_appointments: number
   id_patients: number
+  tipo_appointment: number | null
   paciente: string | null
   fecha_hora: string
   nom_estado: string
   fec_ingreso: string | null
   fec_dilatacion: string | null
   prioridad: boolean | null
+}
+
+interface AppointmentType {
+  id_tipo_appointment: number
+  nom_tipo_appointment: string
+  logo?: string | null
+  path?: string | null
 }
 
 interface ClinicalEntry {
@@ -182,6 +197,10 @@ export function ClinicalRecordsPage({
     hasPermission('appointments.view')
       && (role === 'doctor' || access.filterToScheduledPatients === true),
   )
+  const appointmentTypes = useResource<AppointmentType[]>(
+    '/appointments/types',
+    pageMode && hasPermission('appointments.view'),
+  )
   const scheduledAppointments = {
     ...appointments,
     data: (appointments.data ?? []).filter((appointment) => SCHEDULED_STATES.includes(appointment.nom_estado)),
@@ -306,6 +325,16 @@ export function ClinicalRecordsPage({
     `/allergies/?patient_id=${allergyPatientId}`,
     allergyPatientId > 0,
   )
+  const allergyTypes = useResource<AllergyTypeOption[]>('/allergy-types/', pageMode && canCreate)
+  const [allergyModalOpen, setAllergyModalOpen] = useState(false)
+  const [allergySubmitting, setAllergySubmitting] = useState(false)
+  const [allergyError, setAllergyError] = useState<string | null>(null)
+  const [selectedAllergyTypeId, setSelectedAllergyTypeId] = useState('')
+  const activePatientAllergies = (allergies.data ?? []).filter((item) => item.activo === true)
+  const assignedAllergyTypeIds = new Set(activePatientAllergies.map((item) => item.id_tipo_alergia))
+  const availableAllergyTypes = (allergyTypes.data ?? []).filter(
+    (type) => type.activo && !assignedAllergyTypeIds.has(type.id_tipo_alergia),
+  )
   const allergyBanner = (access.createInModal || pageMode) && allergyPatientId > 0 ? (
     allergies.loading ? (
       <div className="notice allergy-banner" role="status">Consultando alergias…</div>
@@ -326,7 +355,36 @@ export function ClinicalRecordsPage({
 
   const entryModalOpen = asModal && Boolean(selectedRecord)
   const statusModalOpen = statusAppointment !== null
-  const anyModalOpen = modalOpen || entryModalOpen || statusModalOpen
+  const anyModalOpen = modalOpen || entryModalOpen || statusModalOpen || allergyModalOpen
+
+  function closeAllergyModal() {
+    if (allergySubmitting) return
+    setAllergyModalOpen(false)
+    setSelectedAllergyTypeId('')
+    setAllergyError(null)
+  }
+
+  async function associateAllergy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAllergySubmitting(true)
+    setAllergyError(null)
+    try {
+      await apiRequest('/allergies/', {
+        method: 'POST',
+        body: JSON.stringify({
+          id_patients: allergyPatientId,
+          id_tipo_alergia: Number(selectedAllergyTypeId),
+        }),
+      })
+      setAllergyModalOpen(false)
+      setSelectedAllergyTypeId('')
+      allergies.reload()
+    } catch (reason) {
+      setAllergyError(getErrorMessage(reason, 'No fue posible asociar la alergia al paciente.'))
+    } finally {
+      setAllergySubmitting(false)
+    }
+  }
 
   function openStatusModal(appointment: DoctorAppointment) {
     setStatusAppointment(appointment)
@@ -413,8 +471,9 @@ export function ClinicalRecordsPage({
   useEffect(() => {
     if (!anyModalOpen) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || submitting || statusSubmitting) return
+      if (event.key !== 'Escape' || submitting || statusSubmitting || allergySubmitting) return
       if (statusModalOpen) closeStatusModal()
+      else if (allergyModalOpen) closeAllergyModal()
       else if (modalOpen) closeCreate()
       else if (entryRecordId !== null) resetEntryForm()
       else closeDetail()
@@ -426,7 +485,7 @@ export function ClinicalRecordsPage({
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [anyModalOpen, modalOpen, statusModalOpen, submitting, statusSubmitting, entryRecordId])
+  }, [anyModalOpen, modalOpen, statusModalOpen, allergyModalOpen, submitting, statusSubmitting, allergySubmitting, entryRecordId])
 
   function resetEntryForm() {
     setEntryRecordId(null)
@@ -484,6 +543,11 @@ export function ClinicalRecordsPage({
         return aToday - bToday || new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime()
       })[0]
   }
+
+  const focusedAppointment = pageMode && focusPatientId ? appointmentToFinalize(focusPatientId) : undefined
+  const appointmentLogoType = focusedAppointment?.tipo_appointment == null
+    ? undefined
+    : appointmentTypes.data?.find((item) => item.id_tipo_appointment === focusedAppointment.tipo_appointment)
 
   async function createHistory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -668,7 +732,7 @@ export function ClinicalRecordsPage({
             <table className="clinical-measure-table">
               <thead>
                 <tr><th colSpan={3} className="clinical-measure-title">{general}</th></tr>
-                <tr><th>Medición</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr>
+                <tr><th>Detalle</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr>
               </thead>
               <tbody>
                 {items.map((item) => {
@@ -749,13 +813,85 @@ export function ClinicalRecordsPage({
   return (
     <section className={pageMode ? 'consult-state' : undefined}>
       {pageMode && (
-        <button className="button button-secondary" type="button" onClick={() => navigate('/doctor/consult')}>
-          ← Volver a consultas
-        </button>
+        <div className="consult-state-header">
+          <div className="consult-state-header-actions">
+            <button className="button button-secondary" type="button" onClick={() => navigate('/doctor/consult')}>
+              ← Volver a consultas
+            </button>
+            <button
+              className={`notice allergy-banner allergy-trigger ${allergies.error || activePatientAllergies.length ? 'notice-warning' : 'notice-success'}`}
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={allergyModalOpen}
+              onClick={() => {
+                setAllergyError(null)
+                setSelectedAllergyTypeId('')
+                setAllergyModalOpen(true)
+              }}
+            >
+              <span>
+                {allergies.loading
+                  ? 'Consultando alergias…'
+                  : allergies.error
+                    ? 'Error al consultar alergias'
+                    : activePatientAllergies.length
+                      ? `⚠ Alergias registradas (${activePatientAllergies.length})`
+                      : 'Sin alergias registradas'}
+              </span>
+            </button>
+          </div>
+          {patientHeaderCard}
+        </div>
       )}
-      {patientHeaderCard}
-      {pageMode && allergyBanner}
-      {pageMode && patientCupsCard}
+      {pageMode && (
+        <div className="consult-state-summary">
+          {patientCupsCard}
+          <div className="appointment-row">
+          {appointmentLogoType?.logo && (
+            <div className="panel appointment-logo-card" aria-label="Logo del tipo de cita">
+              <img
+                src={`data:image/png;base64,${appointmentLogoType.logo}`}
+                alt={`Logo de ${appointmentLogoType.nom_tipo_appointment.trim()}`}
+              />
+            </div>
+          )}
+          <div className="panel appointment-type-card" aria-label="Tipo de cita del paciente">
+            <div className="user-form-header">
+              <span className="eyebrow">CITA</span>
+              <h2>Tipo de cita</h2>
+            </div>
+            {!hasPermission('appointments.view') ? (
+              <p>No tienes permiso para consultar las citas.</p>
+            ) : appointments.loading ? (
+              <div className="notice" role="status">Consultando la cita…</div>
+            ) : appointments.error ? (
+              <div className="notice notice-error" role="alert">
+                <span>No se pudo consultar la cita: {appointments.error}</span>
+                <button type="button" className="text-button" onClick={appointments.reload}>Reintentar</button>
+              </div>
+            ) : (() => {
+              const appointment = appointmentToFinalize(focusPatientId)
+              if (!appointment) return <p>El paciente no tiene citas programadas.</p>
+              if (appointment.tipo_appointment == null) return <p>La cita no tiene un tipo registrado.</p>
+              if (appointmentTypes.loading) return <div className="notice" role="status">Consultando el tipo de cita…</div>
+              if (appointmentTypes.error) return (
+                <div className="notice notice-error" role="alert">
+                  <span>No se pudo consultar el tipo de cita: {appointmentTypes.error}</span>
+                  <button type="button" className="text-button" onClick={appointmentTypes.reload}>Reintentar</button>
+                </div>
+              )
+              const type = appointmentTypes.data?.find((item) => item.id_tipo_appointment === appointment.tipo_appointment)
+              return (
+                <>
+                  <p>{type?.nom_tipo_appointment ?? `Tipo de cita #${appointment.tipo_appointment} no encontrado.`}</p>
+                  <p className="muted">Cita #{appointment.id_appointments} · {formatDate(appointment.fecha_hora)}</p>
+                </>
+              )
+            })()}
+          </div>
+          </div>
+        </div>
+      )}
       {!pageMode && role === 'doctor' && access.appointmentPatientAction && (
         <ResourceTable
           title="Mis citas programadas"
@@ -894,6 +1030,92 @@ export function ClinicalRecordsPage({
       {error && !anyModalOpen && !pageMode && <div className="notice notice-error clinical-feedback" role="alert"><strong>Error.</strong><span>{error}</span></div>}
       {notice && <div className="notice notice-success clinical-feedback" role="status">{notice}</div>}
 
+      {pageMode && allergyModalOpen && (
+        <div
+          className="modal-backdrop allergy-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeAllergyModal()
+          }}
+        >
+          <div className="panel user-form-panel modal-dialog allergy-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="patient-allergy-title">
+            <div className="user-form-header">
+              <span className="eyebrow">ALERGIAS DEL PACIENTE</span>
+              <h2 id="patient-allergy-title">Alergias del paciente</h2>
+              <p>{headerPatient ? `${headerPatient.nom_patients} ${headerPatient.ape_patients}` : `Paciente #${allergyPatientId}`}</p>
+            </div>
+            {allergies.loading ? (
+              <div className="notice" role="status">Consultando alergias registradas…</div>
+            ) : allergies.error ? (
+              <div className="notice notice-error" role="alert">
+                <span>No se pudieron consultar las alergias: {allergies.error}</span>
+                <button className="text-button" type="button" onClick={allergies.reload}>Reintentar</button>
+              </div>
+            ) : activePatientAllergies.length ? (
+              <div className="patient-allergy-list">
+                <strong>Alergias activas</strong>
+                <ul>
+                  {activePatientAllergies.map((allergy) => (
+                    <li key={allergy.id_alergia}>{allergy.nom_tipo_alergia ?? 'Tipo de alergia sin nombre'}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="muted">El paciente no tiene alergias activas registradas.</p>
+            )}
+            {canCreate && (allergyTypes.loading ? (
+              <div className="notice" role="status">Consultando tipos de alergia…</div>
+            ) : allergyTypes.error ? (
+              <div className="notice notice-error" role="alert">
+                <span>No se pudieron cargar los tipos de alergia: {allergyTypes.error}</span>
+                <button className="text-button" type="button" onClick={allergyTypes.reload}>Reintentar</button>
+              </div>
+            ) : !availableAllergyTypes.length ? (
+              <div className="notice notice-warning" role="status">
+                {allergyTypes.data?.some((type) => type.activo)
+                  ? 'Todos los tipos de alergia activos ya están asociados al paciente.'
+                  : 'No hay tipos de alergia activos disponibles.'}
+              </div>
+            ) : null)}
+            {canCreate && allergyError && <div className="notice notice-error" role="alert">{allergyError}</div>}
+            {canCreate && <form className="user-form" onSubmit={associateAllergy}>
+              <div className="field">
+                <label htmlFor="consult-allergy-type">Tipo de alergia</label>
+                <select
+                  id="consult-allergy-type"
+                  value={selectedAllergyTypeId}
+                  onChange={(event) => {
+                    setSelectedAllergyTypeId(event.target.value)
+                    setAllergyError(null)
+                  }}
+                  required
+                  disabled={allergySubmitting || allergies.loading || Boolean(allergies.error) || allergyTypes.loading || Boolean(allergyTypes.error) || !availableAllergyTypes.length}
+                >
+                  <option value="">Seleccione un tipo</option>
+                  {availableAllergyTypes.map((type) => (
+                    <option key={type.id_tipo_alergia} value={type.id_tipo_alergia}>{type.nom_tipo_alergia}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="user-form-actions">
+                <button className="button button-secondary" type="button" onClick={closeAllergyModal} disabled={allergySubmitting}>Cancelar</button>
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  disabled={allergySubmitting || allergies.loading || Boolean(allergies.error) || allergyTypes.loading || Boolean(allergyTypes.error) || !availableAllergyTypes.length || !selectedAllergyTypeId}
+                >
+                  {allergySubmitting ? 'Guardando…' : 'Asociar alergia'}
+                </button>
+              </div>
+            </form>}
+            {!canCreate && (
+              <div className="user-form-actions">
+                <button className="button button-secondary" type="button" onClick={closeAllergyModal}>Cerrar</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {createOpen && canCreate && (
         <div
           className={asModal ? 'modal-backdrop' : undefined}
@@ -941,7 +1163,7 @@ export function ClinicalRecordsPage({
             )}
             {entryFields(entryForm, updateEntry, 'initial', <>{measureSelector('initial')}{diagSelector('initial')}{cupSelector('initial')}</>)}
             <div className="user-form-actions">
-              <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : `Crear ${access.entityName}`}</button>
+              <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : pageMode ? 'Guardar' : `Crear ${access.entityName}`}</button>
               {access.createInModal && (
                 <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient || !appointmentToFinalize()}>
                   Finalizar consulta
@@ -1057,7 +1279,7 @@ export function ClinicalRecordsPage({
                       <dt>{general}</dt>
                       <dd>
                         <table className="clinical-measure-table">
-                          <thead><tr><th>Medición</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr></thead>
+                          <thead><tr><th>DETALLE</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr></thead>
                           <tbody>
                             {(entry.medidas ?? []).filter((m) => (m.general ?? 'Medidas') === general).map((m) => (
                               <tr key={m.id_hc_medida}><td>{m.detalle_medida}</td><td>{m.derecho ?? '-'}</td><td>{m.izquierdo ?? '-'}</td></tr>
@@ -1099,24 +1321,26 @@ function entryFields(
 ) {
   return (
     <div className="clinical-form-grid">
-      <div className="field clinical-field-wide">
-        <label htmlFor={`${prefix}-motivo`}>Motivo de consulta</label>
-        <textarea id={`${prefix}-motivo`} value={form.motivo_consulta} onChange={(event) => update('motivo_consulta', event.target.value)} maxLength={10000} required rows={3} />
+      <div className="clinical-field-wide clinical-vitals-row">
+        <div className="field">
+          <label htmlFor={`${prefix}-motivo`}>Motivo de consulta</label>
+          <textarea id={`${prefix}-motivo`} value={form.motivo_consulta} onChange={(event) => update('motivo_consulta', event.target.value)} maxLength={10000} required rows={3} />
+        </div>
+        <div className="field">
+          <label htmlFor={`${prefix}-weight`}>Peso (kg)</label>
+          <input id={`${prefix}-weight`} type="number" inputMode="decimal" min="0" max="1000" step="0.01" value={form.peso} onChange={(event) => update('peso', event.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor={`${prefix}-height`}>Talla (cm)</label>
+          <input id={`${prefix}-height`} type="number" inputMode="decimal" min="0" max="300" step="0.1" value={form.talle} onChange={(event) => update('talle', event.target.value)} />
+        </div>
       </div>
       <div className="field">
-        <label htmlFor={`${prefix}-weight`}>Peso (kg)</label>
-        <input id={`${prefix}-weight`} type="number" inputMode="decimal" min="0" max="1000" step="0.01" value={form.peso} onChange={(event) => update('peso', event.target.value)} />
-      </div>
-      <div className="field">
-        <label htmlFor={`${prefix}-height`}>Talle (cm)</label>
-        <input id={`${prefix}-height`} type="number" inputMode="decimal" min="0" max="300" step="0.1" value={form.talle} onChange={(event) => update('talle', event.target.value)} />
-      </div>
-      <div className="field">
-        <label htmlFor={`${prefix}-exam`}>Examen físico</label>
+        <label htmlFor={`${prefix}-exam`}>Revision x Sistemas</label>
         <textarea id={`${prefix}-exam`} value={form.examen_fisico} onChange={(event) => update('examen_fisico', event.target.value)} maxLength={20000} rows={3} />
       </div>
       <div className="field">
-        <label htmlFor={`${prefix}-diagnosis`}>Diagnóstico</label>
+        <label htmlFor={`${prefix}-diagnosis`}>Antecedentes</label>
         <textarea id={`${prefix}-diagnosis`} value={form.diagnostico} onChange={(event) => update('diagnostico', event.target.value)} maxLength={20000} rows={3} />
       </div>
       <div className="field">
