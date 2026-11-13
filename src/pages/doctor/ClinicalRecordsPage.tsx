@@ -66,8 +66,10 @@ interface ClinicalEntry {
   notas: string | null
   peso: number | null
   talle: number | null
-  medidas?: { id_hc_medida: number; id_hc_detalle: number; detalle_medida: string | null; general: string | null; derecho: string | null; izquierdo: string | null }[]
+  medidas?: { id_hc_medida: number; id_hc_detalle: number; detalle_medida: string | null; general: string | null; derecho: string | null; izquierdo: string | null; det_derecho: string | null; det_izquierdo: string | null; detalle: string | null }[]
   medico: string
+  nom_espect: string
+  measure_mode: 'detalle' | 'ojos'
   diagnosticos?: { id_diag: number; codigo: string; diagnostico: string }[]
 }
 
@@ -111,13 +113,18 @@ interface EntryForm {
   notas: string
   peso: string
   talle: string
-  medidas: Record<number, { derecho: string; izquierdo: string }>
+  medidas: Record<number, { derecho: string; izquierdo: string; detalle: string }>
 }
 
 interface MeasureType {
   id_hc_detalle: number
   general: string
   detalle: string
+}
+
+interface MeasureConfig {
+  mode: 'detalle' | 'ojos'
+  types: MeasureType[]
 }
 
 const emptyEntry: EntryForm = {
@@ -143,7 +150,7 @@ function entryToForm(entry: ClinicalEntry): EntryForm {
     peso: entry.peso != null ? String(entry.peso) : '',
     talle: entry.talle != null ? String(entry.talle) : '',
     medidas: Object.fromEntries(
-      (entry.medidas ?? []).map((m) => [m.id_hc_detalle, { derecho: m.derecho ?? '', izquierdo: m.izquierdo ?? '' }]),
+      (entry.medidas ?? []).map((m) => [m.id_hc_detalle, { derecho: m.derecho ?? '', izquierdo: m.izquierdo ?? '', detalle: m.detalle ?? '' }]),
     ),
   }
 }
@@ -190,7 +197,7 @@ export function ClinicalRecordsPage({
     && role === 'admin'
     && hasPermission(access.archivePermission)
   const resource = useResource<ClinicalRecord[]>('/clinical-records/')
-  const measureTypes = useResource<MeasureType[]>('/clinical-records/measure-types', canWrite)
+  const measureTypes = useResource<MeasureConfig>('/clinical-records/measure-config', canWrite)
   const patients = useResource<PatientOption[]>('/patients/', canCreate)
   const appointments = useResource<DoctorAppointment[]>(
     '/appointments/',
@@ -500,12 +507,12 @@ export function ClinicalRecordsPage({
     setNotice(null)
   }
 
-  function updateMeasure(id: number, eye: 'derecho' | 'izquierdo', value: string) {
+  function updateMeasure(id: number, field: 'derecho' | 'izquierdo' | 'detalle', value: string) {
     setEntryFormState((current) => ({
       ...current,
       medidas: {
         ...current.medidas,
-        [id]: { ...(current.medidas[id] ?? { derecho: '', izquierdo: '' }), [eye]: value },
+        [id]: { ...(current.medidas[id] ?? { derecho: '', izquierdo: '', detalle: '' }), [field]: value },
       },
     }))
     setError(null)
@@ -523,8 +530,10 @@ export function ClinicalRecordsPage({
         Object.entries(text).map(([key, value]) => [key, (value as string).trim() || null]),
       ),
       medidas: Object.entries(medidas)
-        .map(([id, m]) => ({ id_hc_detalle: Number(id), derecho: m.derecho.trim() || null, izquierdo: m.izquierdo.trim() || null }))
-        .filter((m) => m.derecho || m.izquierdo),
+        .map(([id, m]) => measureTypes.data?.mode === 'detalle'
+          ? { id_hc_detalle: Number(id), detalle: m.detalle.trim() || null }
+          : { id_hc_detalle: Number(id), derecho: m.derecho.trim() || null, izquierdo: m.izquierdo.trim() || null })
+        .filter((m) => 'detalle' in m ? m.detalle : m.derecho || m.izquierdo),
       peso: toNumber(peso),
       talle: toNumber(talle),
       id_cups: cupIds,
@@ -721,18 +730,27 @@ export function ClinicalRecordsPage({
   }
 
   function measureSelector(prefix: string): ReactNode {
+    if (measureTypes.loading) return <div className="notice" role="status">Consultando medidas de la especialidad…</div>
+    if (measureTypes.error) return (
+      <div className="notice notice-error" role="alert">
+        <span>No se pudieron consultar las medidas de la especialidad: {measureTypes.error}</span>
+        <button type="button" className="text-button" onClick={measureTypes.reload}>Reintentar</button>
+      </div>
+    )
+    if (!measureTypes.data?.types.length) return <p>No hay medidas configuradas para su especialidad.</p>
+    const usesDetail = measureTypes.data.mode === 'detalle'
     const groups = new Map<string, MeasureType[]>()
-    for (const item of measureTypes.data ?? []) {
+    for (const item of measureTypes.data.types) {
       groups.set(item.general, [...(groups.get(item.general) ?? []), item])
     }
     return (
       <>
         {[...groups.entries()].map(([general, items]) => (
           <div className="field clinical-field-wide" key={general}>
-            <table className="clinical-measure-table">
+            <table className={`clinical-measure-table${usesDetail ? ' clinical-measure-table-detail' : ''}`}>
               <thead>
-                <tr><th colSpan={3} className="clinical-measure-title">{general}</th></tr>
-                <tr><th>Detalle</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr>
+                <tr><th colSpan={usesDetail ? 2 : 3} className="clinical-measure-title">{general}</th></tr>
+                {usesDetail ? <tr><th>Concepto</th><th>Detalle</th></tr> : <tr><th>Detalle</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr>}
               </thead>
               <tbody>
                 {items.map((item) => {
@@ -740,8 +758,14 @@ export function ClinicalRecordsPage({
                   return (
                     <tr key={item.id_hc_detalle}>
                       <td>{item.detalle}</td>
-                      <td><input aria-label={`${item.detalle} ojo derecho`} id={`${prefix}-od-${item.id_hc_detalle}`} maxLength={20} value={value?.derecho ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'derecho', event.target.value)} /></td>
-                      <td><input aria-label={`${item.detalle} ojo izquierdo`} id={`${prefix}-oi-${item.id_hc_detalle}`} maxLength={20} value={value?.izquierdo ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'izquierdo', event.target.value)} /></td>
+                      {usesDetail ? (
+                        <td><textarea aria-label={`${item.detalle} detalle`} id={`${prefix}-detalle-${item.id_hc_detalle}`} maxLength={255} rows={3} value={value?.detalle ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'detalle', event.target.value)} /></td>
+                      ) : (
+                        <>
+                          <td><input aria-label={`${item.detalle} ojo derecho`} id={`${prefix}-od-${item.id_hc_detalle}`} maxLength={20} value={value?.derecho ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'derecho', event.target.value)} /></td>
+                          <td><input aria-label={`${item.detalle} ojo izquierdo`} id={`${prefix}-oi-${item.id_hc_detalle}`} maxLength={20} value={value?.izquierdo ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'izquierdo', event.target.value)} /></td>
+                        </>
+                      )}
                     </tr>
                   )
                 })}
@@ -794,9 +818,9 @@ export function ClinicalRecordsPage({
       </div>
       {entryFields(entryForm, updateEntry, 'edit', <>{measureSelector('edit')}{diagSelector('edit')}{cupSelector('edit')}</>)}
       <div className="user-form-actions">
-        <button className="button button-primary" type="submit" disabled={submitting}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
+        <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error)}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
         {access.createInModal && !correctionEntry && selectedRecord && (
-          <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || !appointmentToFinalize(selectedRecord.id_patients)}>
+          <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || !appointmentToFinalize(selectedRecord.id_patients)}>
             Finalizar consulta
           </button>
         )}
@@ -1163,9 +1187,9 @@ export function ClinicalRecordsPage({
             )}
             {entryFields(entryForm, updateEntry, 'initial', <>{measureSelector('initial')}{diagSelector('initial')}{cupSelector('initial')}</>)}
             <div className="user-form-actions">
-              <button className="button button-primary" type="submit" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : pageMode ? 'Guardar' : `Crear ${access.entityName}`}</button>
+              <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : pageMode ? 'Guardar' : `Crear ${access.entityName}`}</button>
               {access.createInModal && (
-                <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || patientOptionsLoading || Boolean(patients.error) || !selectedPatient || !appointmentToFinalize()}>
+                <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || patientOptionsLoading || Boolean(patients.error) || !selectedPatient || !appointmentToFinalize()}>
                   Finalizar consulta
                 </button>
               )}
@@ -1265,7 +1289,7 @@ export function ClinicalRecordsPage({
             {selectedRecord.entries.map((entry) => (
               <article className="clinical-entry" key={entry.id_entries}>
                 <div className="clinical-entry-heading">
-                  <div><strong>{entry.motivo_consulta}</strong><span>{formatDate(entry.fec_entrada)} · {entry.medico}</span></div>
+                  <div><strong>{entry.motivo_consulta}</strong><span>{formatDate(entry.fec_entrada)} · {entry.medico} · {entry.nom_espect}</span></div>
                   {entry.id_entries_rectifica && <span className="clinical-correction-pill">Rectifica nota #{entry.id_entries_rectifica}</span>}
                   {canEdit && selectedRecord.activo && (
                     <button type="button" className="action-button action-button-edit" onClick={() => startCorrection(selectedRecord, entry)}>Editar / rectificar</button>
@@ -1278,11 +1302,30 @@ export function ClinicalRecordsPage({
                     <div key={general}>
                       <dt>{general}</dt>
                       <dd>
-                        <table className="clinical-measure-table">
-                          <thead><tr><th>DETALLE</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr></thead>
+                        <table className={`clinical-measure-table${entry.measure_mode === 'detalle' ? ' clinical-measure-table-detail' : ''}`}>
+                          <thead>{entry.measure_mode === 'detalle'
+                            ? <tr><th>Concepto</th><th>Detalle</th></tr>
+                            : <tr><th>DETALLE</th><th>Ojo Derecho</th><th>Ojo Izquierdo</th></tr>}</thead>
                           <tbody>
                             {(entry.medidas ?? []).filter((m) => (m.general ?? 'Medidas') === general).map((m) => (
-                              <tr key={m.id_hc_medida}><td>{m.detalle_medida}</td><td>{m.derecho ?? '-'}</td><td>{m.izquierdo ?? '-'}</td></tr>
+                              <tr key={m.id_hc_medida}>
+                                {entry.measure_mode === 'detalle' ? (
+                                  <>
+                                    <td>{m.detalle_medida}</td>
+                                    <td>{m.detalle || '-'}
+                                      {(m.derecho || m.izquierdo || m.det_derecho || m.det_izquierdo) && (
+                                        <div>Datos oculares anteriores: derecho {m.derecho || '-'}{m.det_derecho ? ` (${m.det_derecho})` : ''}; izquierdo {m.izquierdo || '-'}{m.det_izquierdo ? ` (${m.det_izquierdo})` : ''}</div>
+                                      )}
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    <td>{m.detalle_medida}{m.detalle && <div>Detalle adicional: {m.detalle}</div>}</td>
+                                    <td>{m.derecho ?? '-'}{m.det_derecho && <div>Detalle: {m.det_derecho}</div>}</td>
+                                    <td>{m.izquierdo ?? '-'}{m.det_izquierdo && <div>Detalle: {m.det_izquierdo}</div>}</td>
+                                  </>
+                                )}
+                              </tr>
                             ))}
                           </tbody>
                         </table>
