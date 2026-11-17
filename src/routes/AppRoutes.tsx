@@ -11,6 +11,7 @@ import { CupsPage } from '../pages/admin/CupsPage'
 import { DiagnosesPage } from '../pages/admin/DiagnosesPage'
 import { ManagementPage } from '../pages/admin/ManagementPage'
 import { AnalysisPage } from '../pages/admin/AnalysisPage'
+import { AntecedentsPage } from '../pages/admin/AntecedentsPage'
 import { PatientsPage } from '../pages/assistant/PatientsPage'
 import { AppointmentsPage } from '../pages/assistant/AppointmentsPage'
 import { IngresoPage } from '../pages/assistant/IngresoPage'
@@ -31,6 +32,7 @@ export function AppRoutes() {
           <Route element={<ProtectedRoute anyPermissions={[
             'entities.view',
             'analysis.view',
+            'antecedents.view',
             'diagnoses.view',
             'cups.view',
             'doctors.view',
@@ -45,6 +47,9 @@ export function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute permission="analysis.view" />}>
             <Route path="/admin/analisis" element={<AnalysisPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission="antecedents.view" />}>
+            <Route path="/admin/antecedentes" element={<AntecedentsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission="users.view" />}>
             <Route path="/admin/users" element={<UsersPage />} />

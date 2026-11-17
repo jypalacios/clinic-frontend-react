@@ -4,7 +4,7 @@ import { Brand } from '../components/Brand'
 
 const navigation = [
   { to: '/dashboard', label: 'Resumen', icon: '⌂' },
-  { to: '/admin/management', label: 'Management', icon: '⚙', anyPermissions: ['analysis.view', 'entities.view', 'diagnoses.view', 'cups.view', 'doctors.view', 'doctors.link_user', 'specialties.view', 'users.view', 'roles.manage', 'allergy_types.view', 'allergies.view'] },
+  { to: '/admin/management', label: 'Management', icon: '⚙', anyPermissions: ['analysis.view', 'antecedents.view', 'entities.view', 'diagnoses.view', 'cups.view', 'doctors.view', 'doctors.link_user', 'specialties.view', 'users.view', 'roles.manage', 'allergy_types.view', 'allergies.view'] },
   { to: '/admin/audit', label: 'Auditoría', icon: '◷', permission: 'audit.view' },
   { to: '/assistant/patients', label: 'Gestión de pacientes', icon: '♧', permission: 'patients.view' },
   { to: '/assistant/appointments', label: 'Citas', icon: '▦', permission: 'appointments.view' },

@@ -4,6 +4,12 @@ import { useAuth } from '../../auth/AuthContext'
 export function ManagementPage() {
   const { hasPermission } = useAuth()
   const links = [
+    hasPermission('antecedents.view') && {
+      to: '/admin/antecedentes',
+      icon: '☷',
+      title: 'Antecedentes',
+      text: 'Administra los subantecedentes por especialidad.',
+    },
     hasPermission('analysis.view') && {
       to: '/admin/analisis',
       icon: '☷',

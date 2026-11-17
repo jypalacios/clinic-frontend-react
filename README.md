@@ -36,6 +36,8 @@ Este backend permite:
 
 Desde Management, Análisis permite seleccionar un tipo de cita y asociarle detalles de historia clínica. La consulta requiere `analysis.view` y la creación o edición requiere `analysis.manage`.
 
+Desde Management, Antecedentes permite consultar y administrar subantecedentes por categoría y especialidad. La tabla permite filtrar por antecedente y especialidad. Requiere `antecedents.view` para consultar y `antecedents.manage` para crear o editar.
+
 La aplicación web de este proyecto está en la raíz `clinica_frontend/` y utiliza React, TypeScript y Vite. Para iniciar el entorno local desde esa raíz:
 
 ```bash

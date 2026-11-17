@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { ResourceState } from '../api/hooks'
 
 type Row = Record<string, unknown>
@@ -13,6 +13,7 @@ interface ResourceTableProps<T> {
   headerAction?: ReactNode
   pageSize?: number
   filters?: ReactNode
+  paginationResetKey?: string
 }
 
 function rowsFrom<T>(value: T | null): Row[] {
@@ -42,9 +43,11 @@ export function ResourceTable<T>({
   headerAction,
   pageSize,
   filters,
+  paginationResetKey,
 }: ResourceTableProps<T>) {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  useEffect(() => setPage(1), [paginationResetKey])
   const rows = useMemo(() => rowsFrom(resource.data), [resource.data])
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase()
