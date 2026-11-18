@@ -150,6 +150,15 @@ tbody tr:hover { background: #fbfcfe; }
 .clinical-measure-table thead th { background: #f3f6fa; }
 .clinical-measure-table .clinical-measure-title { text-align: center; font-weight: 700; }
 .clinical-measure-table td input, .clinical-measure-table td textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.clinical-antecedents-card { padding: 18px; }
+.clinical-antecedents-group { border: 1px solid #d5dde8; border-radius: 6px; margin: 12px 0; padding: 12px; }
+.clinical-antecedents-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.clinical-antecedent-item { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.clinical-antecedent-item label { display: flex; align-items: center; gap: 6px; }
+.clinical-antecedent-item textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+@media (max-width: 600px) {
+  .clinical-antecedents-grid { grid-template-columns: 1fr; }
+}
 .clinical-entry-fields > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; }
 .clinical-entry-fields dt { color: #77869a; font-size: 10px; font-weight: 700; text-transform: uppercase; }
 .clinical-entry-fields dd { min-width: 0; margin: 0; color: #46566b; font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }

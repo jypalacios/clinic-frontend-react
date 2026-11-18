@@ -4,7 +4,7 @@ import { useResource } from '../../api/hooks'
 import { ResourceTable } from '../../components/ResourceTable'
 import { SearchMultiSelect } from '../../components/SearchMultiSelect'
 import { useAuth } from '../../auth/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 interface PatientOption {
   id_patients: number
@@ -71,6 +71,20 @@ interface ClinicalEntry {
   nom_espect: string
   measure_mode: 'detalle' | 'ojos'
   diagnosticos?: { id_diag: number; codigo: string; diagnostico: string }[]
+  antecedentes?: ClinicalAntecedent[]
+}
+
+interface AntecedentType {
+  id_sub_antecedente: number
+  id_cli_antecedente: number
+  det_cli_antecedente: string
+  det_sub_antecedente: string
+}
+
+interface ClinicalAntecedent extends AntecedentType {
+  id_cli_entries_antecedente: number
+  medida_cli_antecedente: string
+  checked: boolean
 }
 
 interface DiagnosisOption {
@@ -114,6 +128,7 @@ interface EntryForm {
   peso: string
   talle: string
   medidas: Record<number, { derecho: string; izquierdo: string; detalle: string }>
+  antecedentes: Record<number, { checked: boolean; value: string }>
 }
 
 interface MeasureType {
@@ -137,6 +152,7 @@ const emptyEntry: EntryForm = {
   peso: '',
   talle: '',
   medidas: {},
+  antecedentes: {},
 }
 
 function entryToForm(entry: ClinicalEntry): EntryForm {
@@ -151,6 +167,9 @@ function entryToForm(entry: ClinicalEntry): EntryForm {
     talle: entry.talle != null ? String(entry.talle) : '',
     medidas: Object.fromEntries(
       (entry.medidas ?? []).map((m) => [m.id_hc_detalle, { derecho: m.derecho ?? '', izquierdo: m.izquierdo ?? '', detalle: m.detalle ?? '' }]),
+    ),
+    antecedentes: Object.fromEntries(
+      (entry.antecedentes ?? []).map((item) => [item.id_sub_antecedente, { checked: item.checked, value: item.medida_cli_antecedente }]),
     ),
   }
 }
@@ -187,6 +206,8 @@ export function ClinicalRecordsPage({
   focusPatientId?: number
 }) {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const appointmentParam = searchParams.get('appointment')
   const pageMode = focusPatientId !== undefined
   const asModal = Boolean(access.createInModal) && !pageMode
   const { user, role, hasPermission } = useAuth()
@@ -520,7 +541,7 @@ export function ClinicalRecordsPage({
   }
 
   function payloadFromEntry() {
-    const { peso, talle, medidas, ...text } = entryForm
+    const { peso, talle, medidas, antecedentes, ...text } = entryForm
     const toNumber = (value: string) => {
       const parsed = Number(value.trim().replace(',', '.'))
       return value.trim() && Number.isFinite(parsed) ? parsed : null
@@ -538,11 +559,24 @@ export function ClinicalRecordsPage({
       talle: toNumber(talle),
       id_cups: cupIds,
       id_diags: diagIds,
+      ...(pageMode && focusedAppointment ? {
+        id_appointment: focusedAppointment.id_appointments,
+        antecedentes: (antecedentTypes.data ?? [])
+          .filter((item) => antecedentes[item.id_sub_antecedente]?.checked)
+          .map((item) => ({
+            id_sub_antecedente: item.id_sub_antecedente,
+            medida_cli_antecedente: antecedentes[item.id_sub_antecedente].value.trim(),
+          })),
+      } : {}),
     }
   }
 
   function appointmentToFinalize(patientIdValue: number = Number(patientId)): DoctorAppointment | undefined {
     const id = patientIdValue
+    if (pageMode && appointmentParam !== null) {
+      return scheduledAppointments.data.find((item) =>
+        item.id_patients === id && String(item.id_appointments) === appointmentParam)
+    }
     const today = new Date().toDateString()
     return scheduledAppointments.data
       .filter((item) => item.id_patients === id)
@@ -554,6 +588,15 @@ export function ClinicalRecordsPage({
   }
 
   const focusedAppointment = pageMode && focusPatientId ? appointmentToFinalize(focusPatientId) : undefined
+  const antecedentTypes = useResource<AntecedentType[]>(
+    `/clinical-records/appointments/${focusedAppointment?.id_appointments ?? 0}/antecedents`,
+    pageMode && Boolean(focusedAppointment),
+  )
+  const hasSelectedAntecedents = Object.values(entryForm.antecedentes).some((item) => item.checked)
+  const antecedentSaveBlocked = pageMode && (
+    appointments.loading || Boolean(appointments.error)
+    || (focusedAppointment ? antecedentTypes.loading || Boolean(antecedentTypes.error) : hasSelectedAntecedents)
+  )
   const appointmentLogoType = focusedAppointment?.tipo_appointment == null
     ? undefined
     : appointmentTypes.data?.find((item) => item.id_tipo_appointment === focusedAppointment.tipo_appointment)
@@ -706,10 +749,10 @@ export function ClinicalRecordsPage({
     setNotice(null)
   }
 
-  function openAppointmentPatient(patientId: number) {
+  function openAppointmentPatient(patientId: number, appointmentId?: number) {
     if (!Number.isInteger(patientId) || patientId <= 0) return
     if (access.statePath) {
-      navigate(`${access.statePath}/${patientId}`)
+      navigate(`${access.statePath}/${patientId}${appointmentId ? `?appointment=${appointmentId}` : ''}`)
       return
     }
     const existingRecord = resource.data?.find((record) => record.id_patients === patientId)
@@ -727,6 +770,58 @@ export function ClinicalRecordsPage({
     setPatientId(String(patientId))
     setEntryForm(emptyEntry)
     setCreateOpen(true)
+  }
+
+  function antecedentCard(prefix: string): ReactNode {
+    if (!pageMode) return null
+    const groups = new Map<string, AntecedentType[]>()
+    for (const item of antecedentTypes.data ?? []) {
+      groups.set(item.det_cli_antecedente, [...(groups.get(item.det_cli_antecedente) ?? []), item])
+    }
+    return (
+      <section className="panel clinical-antecedents-card clinical-field-wide" aria-label="Antecedentes">
+        <div className="user-form-header"><h2>Antecedentes</h2></div>
+        {appointments.loading ? <p role="status">Consultando la cita…</p>
+          : appointments.error ? <p role="alert">No se pudo consultar la cita: {appointments.error}</p>
+          : !focusedAppointment ? <p>No hay una cita programada disponible para cargar antecedentes.{hasSelectedAntecedents && ' Se requiere una cita para guardar los antecedentes seleccionados.'}</p>
+          : antecedentTypes.loading ? <p role="status">Consultando antecedentes…</p>
+          : antecedentTypes.error ? (
+            <div className="notice notice-error" role="alert">
+              <span>No se pudieron consultar los antecedentes: {antecedentTypes.error}</span>
+              <button type="button" className="text-button" onClick={antecedentTypes.reload}>Reintentar</button>
+            </div>
+          ) : !groups.size ? <p>No hay antecedentes configurados para la especialidad de esta cita.{hasSelectedAntecedents && ' Los antecedentes anteriores no se copiarán a la nueva nota.'}</p>
+          : <>
+            {Object.entries(entryForm.antecedentes).some(([id, value]) => value.checked && !antecedentTypes.data?.some((item) => item.id_sub_antecedente === Number(id))) && (
+              <p className="notice notice-warning">Los antecedentes anteriores que no pertenezcan a esta especialidad no se copiarán a la nueva nota.</p>
+            )}
+            {[...groups.entries()].map(([group, items]) => (
+            <fieldset key={group} className="clinical-antecedents-group">
+              <legend>{group}</legend>
+              <div className="clinical-antecedents-grid">
+              {items.map((item) => {
+                const value = entryForm.antecedentes[item.id_sub_antecedente] ?? { checked: false, value: '' }
+                const id = `${prefix}-antecedent-${item.id_sub_antecedente}`
+                const update = (changes: Partial<typeof value>) => setEntryFormState((current) => ({
+                  ...current,
+                  antecedentes: {
+                    ...current.antecedentes,
+                    [item.id_sub_antecedente]: { ...(current.antecedentes[item.id_sub_antecedente] ?? { checked: false, value: '' }), ...changes },
+                  },
+                }))
+                return (
+                  <div className="clinical-antecedent-item" key={item.id_sub_antecedente}>
+                    <label htmlFor={id}><input id={id} type="checkbox" checked={value.checked} onChange={(event) => update({ checked: event.target.checked })} /> {item.det_sub_antecedente}</label>
+                    <textarea aria-label={`Valor de ${item.det_sub_antecedente}`} value={value.value} disabled={!value.checked} maxLength={20000} rows={2} onChange={(event) => update({ value: event.target.value })} />
+                  </div>
+                )
+              })}
+              </div>
+            </fieldset>
+            ))}
+          </>}
+      </section>
+    )
   }
 
   function measureSelector(prefix: string): ReactNode {
@@ -816,11 +911,11 @@ export function ClinicalRecordsPage({
         <h2>{correctionEntry ? 'Registrar una rectificación' : 'Agregar atención'}</h2>
         <p>Los registros clínicos son inmutables. Al editar, el sistema conserva la nota original y guarda esta como una nueva rectificación.</p>
       </div>
-      {entryFields(entryForm, updateEntry, 'edit', <>{measureSelector('edit')}{diagSelector('edit')}{cupSelector('edit')}</>)}
+      {entryFields(entryForm, updateEntry, 'edit', <>{antecedentCard('edit')}{measureSelector('edit')}{diagSelector('edit')}{cupSelector('edit')}</>)}
       <div className="user-form-actions">
-        <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error)}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
+        <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
         {access.createInModal && !correctionEntry && selectedRecord && (
-          <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || !appointmentToFinalize(selectedRecord.id_patients)}>
+          <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || !appointmentToFinalize(selectedRecord.id_patients)}>
             Finalizar consulta
           </button>
         )}
@@ -937,7 +1032,7 @@ export function ClinicalRecordsPage({
               <button
                 className="text-button"
                 type="button"
-                onClick={() => openAppointmentPatient(Number(row.id_patients))}
+                onClick={() => openAppointmentPatient(Number(row.id_patients), Number(row.id_appointments))}
                 disabled={
                   resource.loading
                   || Boolean(resource.error)
@@ -1185,11 +1280,11 @@ export function ClinicalRecordsPage({
                 </select>
               </div>
             )}
-            {entryFields(entryForm, updateEntry, 'initial', <>{measureSelector('initial')}{diagSelector('initial')}{cupSelector('initial')}</>)}
+            {entryFields(entryForm, updateEntry, 'initial', <>{antecedentCard('initial')}{measureSelector('initial')}{diagSelector('initial')}{cupSelector('initial')}</>)}
             <div className="user-form-actions">
-              <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : pageMode ? 'Guardar' : `Crear ${access.entityName}`}</button>
+              <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : pageMode ? 'Guardar' : `Crear ${access.entityName}`}</button>
               {access.createInModal && (
-                <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || patientOptionsLoading || Boolean(patients.error) || !selectedPatient || !appointmentToFinalize()}>
+                <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || patientOptionsLoading || Boolean(patients.error) || !selectedPatient || !appointmentToFinalize()}>
                   Finalizar consulta
                 </button>
               )}
@@ -1298,6 +1393,11 @@ export function ClinicalRecordsPage({
                 <dl className="clinical-entry-fields">
                   {entry.peso != null && <div><dt>Peso</dt><dd>{entry.peso} kg</dd></div>}
                   {entry.talle != null && <div><dt>Talle</dt><dd>{entry.talle} cm</dd></div>}
+                  {(entry.antecedentes ?? []).filter((item) => item.checked).length > 0 && (
+                    <div><dt>Antecedentes</dt><dd>{(entry.antecedentes ?? []).filter((item) => item.checked).map((item) => (
+                      <div key={item.id_cli_entries_antecedente}>{item.det_cli_antecedente} · {item.det_sub_antecedente}: {item.medida_cli_antecedente || '—'}</div>
+                    ))}</dd></div>
+                  )}
                   {[...new Set((entry.medidas ?? []).map((m) => m.general ?? 'Medidas'))].map((general) => (
                     <div key={general}>
                       <dt>{general}</dt>

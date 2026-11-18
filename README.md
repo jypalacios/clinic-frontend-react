@@ -38,6 +38,8 @@ Desde Management, Análisis permite seleccionar un tipo de cita y asociarle deta
 
 Desde Management, Antecedentes permite consultar y administrar subantecedentes por categoría y especialidad. La tabla permite filtrar por antecedente y especialidad. Requiere `antecedents.view` para consultar y `antecedents.manage` para crear o editar.
 
+En la página de consulta, la tarjeta Antecedentes muestra los conceptos de la especialidad de la cita seleccionada. Marcar un concepto habilita su valor; los datos se guardan junto con la nota. Una rectificación conserva la nota y los antecedentes originales.
+
 La aplicación web de este proyecto está en la raíz `clinica_frontend/` y utiliza React, TypeScript y Vite. Para iniciar el entorno local desde esa raíz:
 
 ```bash
