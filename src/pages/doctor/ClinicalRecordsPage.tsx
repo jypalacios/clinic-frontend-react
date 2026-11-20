@@ -72,6 +72,7 @@ interface ClinicalEntry {
   measure_mode: 'detalle' | 'ojos'
   diagnosticos?: { id_diag: number; codigo: string; diagnostico: string }[]
   antecedentes?: ClinicalAntecedent[]
+  revision_sistemas?: ClinicalRevisionSystem[]
 }
 
 interface AntecedentType {
@@ -85,6 +86,16 @@ interface ClinicalAntecedent extends AntecedentType {
   id_cli_entries_antecedente: number
   medida_cli_antecedente: string
   checked: boolean
+}
+
+interface RevisionSystemType {
+  id_revision_sistema: number
+  det_revision_sistemas: string
+}
+
+interface ClinicalRevisionSystem extends RevisionSystemType {
+  checked: boolean
+  medida_revision: string
 }
 
 interface DiagnosisOption {
@@ -129,6 +140,7 @@ interface EntryForm {
   talle: string
   medidas: Record<number, { derecho: string; izquierdo: string; detalle: string }>
   antecedentes: Record<number, { checked: boolean; value: string }>
+  revision_sistemas: Record<number, { checked: boolean; value: string }>
 }
 
 interface MeasureType {
@@ -153,6 +165,7 @@ const emptyEntry: EntryForm = {
   talle: '',
   medidas: {},
   antecedentes: {},
+  revision_sistemas: {},
 }
 
 function entryToForm(entry: ClinicalEntry): EntryForm {
@@ -170,6 +183,9 @@ function entryToForm(entry: ClinicalEntry): EntryForm {
     ),
     antecedentes: Object.fromEntries(
       (entry.antecedentes ?? []).map((item) => [item.id_sub_antecedente, { checked: item.checked, value: item.medida_cli_antecedente }]),
+    ),
+    revision_sistemas: Object.fromEntries(
+      (entry.revision_sistemas ?? []).map((item) => [item.id_revision_sistema, { checked: item.checked, value: item.medida_revision }]),
     ),
   }
 }
@@ -219,6 +235,7 @@ export function ClinicalRecordsPage({
     && hasPermission(access.archivePermission)
   const resource = useResource<ClinicalRecord[]>('/clinical-records/')
   const measureTypes = useResource<MeasureConfig>('/clinical-records/measure-config', canWrite)
+  const revisionSystemTypes = useResource<RevisionSystemType[]>('/clinical-records/revision-sistemas', pageMode && canWrite)
   const patients = useResource<PatientOption[]>('/patients/', canCreate)
   const appointments = useResource<DoctorAppointment[]>(
     '/appointments/',
@@ -540,8 +557,22 @@ export function ClinicalRecordsPage({
     setNotice(null)
   }
 
+  function updateRevisionSystem(id: number, changes: Partial<{ checked: boolean; value: string }>) {
+    setEntryFormState((current) => {
+      const previous = current.revision_sistemas[id] ?? { checked: false, value: '' }
+      const updated = { ...previous, ...changes }
+      if (changes.checked === false) updated.value = ''
+      return {
+        ...current,
+        revision_sistemas: { ...current.revision_sistemas, [id]: updated },
+      }
+    })
+    setError(null)
+    setNotice(null)
+  }
+
   function payloadFromEntry() {
-    const { peso, talle, medidas, antecedentes, ...text } = entryForm
+    const { peso, talle, medidas, antecedentes, revision_sistemas, ...text } = entryForm
     const toNumber = (value: string) => {
       const parsed = Number(value.trim().replace(',', '.'))
       return value.trim() && Number.isFinite(parsed) ? parsed : null
@@ -559,6 +590,16 @@ export function ClinicalRecordsPage({
       talle: toNumber(talle),
       id_cups: cupIds,
       id_diags: diagIds,
+      ...(pageMode ? {
+        revision_sistemas: (revisionSystemTypes.data ?? []).map((item) => {
+          const value = revision_sistemas[item.id_revision_sistema] ?? { checked: false, value: '' }
+          return {
+            id_revision_sistema: item.id_revision_sistema,
+            checked: value.checked,
+            medida_revision: value.checked ? value.value.trim() : '',
+          }
+        }),
+      } : {}),
       ...(pageMode && focusedAppointment ? {
         id_appointment: focusedAppointment.id_appointments,
         antecedentes: (antecedentTypes.data ?? [])
@@ -597,6 +638,8 @@ export function ClinicalRecordsPage({
     appointments.loading || Boolean(appointments.error)
     || (focusedAppointment ? antecedentTypes.loading || Boolean(antecedentTypes.error) : hasSelectedAntecedents)
   )
+  const revisionSystemsSaveBlocked = pageMode && canWrite
+    && (revisionSystemTypes.loading || Boolean(revisionSystemTypes.error))
   const appointmentLogoType = focusedAppointment?.tipo_appointment == null
     ? undefined
     : appointmentTypes.data?.find((item) => item.id_tipo_appointment === focusedAppointment.tipo_appointment)
@@ -824,6 +867,51 @@ export function ClinicalRecordsPage({
     )
   }
 
+  function revisionSystemsCard(prefix: string): ReactNode {
+    if (!pageMode) return null
+    return (
+      <section className="panel clinical-antecedents-card clinical-field-wide" aria-label="Revisión por sistemas">
+        <div className="user-form-header"><h2>Revisión por sistemas</h2></div>
+        {revisionSystemTypes.loading ? <p role="status">Consultando ítems de revisión…</p>
+          : revisionSystemTypes.error ? (
+            <div className="notice notice-error" role="alert">
+              <span>No se pudieron consultar los ítems de revisión: {revisionSystemTypes.error}</span>
+              <button type="button" className="text-button" onClick={revisionSystemTypes.reload}>Reintentar</button>
+            </div>
+          ) : !revisionSystemTypes.data?.length ? <p>No hay ítems de revisión por sistemas configurados.</p>
+          : (
+            <div className="clinical-antecedents-grid">
+              {revisionSystemTypes.data.map((item) => {
+                const value = entryForm.revision_sistemas[item.id_revision_sistema] ?? { checked: false, value: '' }
+                const id = `${prefix}-revision-system-${item.id_revision_sistema}`
+                return (
+                  <div className="clinical-antecedent-item" key={item.id_revision_sistema}>
+                    <label htmlFor={id}>
+                      <input
+                        id={id}
+                        type="checkbox"
+                        checked={value.checked}
+                        onChange={(event) => updateRevisionSystem(item.id_revision_sistema, { checked: event.target.checked })}
+                      />
+                      {item.det_revision_sistemas}
+                    </label>
+                    <textarea
+                      aria-label={`Medida de ${item.det_revision_sistemas}`}
+                      value={value.value}
+                      disabled={!value.checked}
+                      maxLength={255}
+                      rows={2}
+                      onChange={(event) => updateRevisionSystem(item.id_revision_sistema, { value: event.target.value })}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          )}
+      </section>
+    )
+  }
+
   function measureSelector(prefix: string): ReactNode {
     if (measureTypes.loading) return <div className="notice" role="status">Consultando medidas de la especialidad…</div>
     if (measureTypes.error) return (
@@ -911,11 +999,11 @@ export function ClinicalRecordsPage({
         <h2>{correctionEntry ? 'Registrar una rectificación' : 'Agregar atención'}</h2>
         <p>Los registros clínicos son inmutables. Al editar, el sistema conserva la nota original y guarda esta como una nueva rectificación.</p>
       </div>
-      {entryFields(entryForm, updateEntry, 'edit', <>{antecedentCard('edit')}{measureSelector('edit')}{diagSelector('edit')}{cupSelector('edit')}</>)}
+      {entryFields(entryForm, updateEntry, 'edit', <>{revisionSystemsCard('edit')}{antecedentCard('edit')}{measureSelector('edit')}{diagSelector('edit')}{cupSelector('edit')}</>)}
       <div className="user-form-actions">
-        <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
+        <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || revisionSystemsSaveBlocked}>{submitting ? 'Guardando…' : correctionEntry ? 'Guardar rectificación' : 'Agregar evolución'}</button>
         {access.createInModal && !correctionEntry && selectedRecord && (
-          <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || !appointmentToFinalize(selectedRecord.id_patients)}>
+          <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || revisionSystemsSaveBlocked || !appointmentToFinalize(selectedRecord.id_patients)}>
             Finalizar consulta
           </button>
         )}
@@ -1280,11 +1368,11 @@ export function ClinicalRecordsPage({
                 </select>
               </div>
             )}
-            {entryFields(entryForm, updateEntry, 'initial', <>{antecedentCard('initial')}{measureSelector('initial')}{diagSelector('initial')}{cupSelector('initial')}</>)}
+            {entryFields(entryForm, updateEntry, 'initial', <>{revisionSystemsCard('initial')}{antecedentCard('initial')}{measureSelector('initial')}{diagSelector('initial')}{cupSelector('initial')}</>)}
             <div className="user-form-actions">
-              <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : pageMode ? 'Guardar' : `Crear ${access.entityName}`}</button>
+              <button className="button button-primary" type="submit" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || revisionSystemsSaveBlocked || patientOptionsLoading || Boolean(patients.error) || !selectedPatient}>{submitting ? 'Guardando…' : pageMode ? 'Guardar' : `Crear ${access.entityName}`}</button>
               {access.createInModal && (
-                <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || patientOptionsLoading || Boolean(patients.error) || !selectedPatient || !appointmentToFinalize()}>
+                <button className="button button-primary" type="submit" data-finalize="true" disabled={submitting || measureTypes.loading || Boolean(measureTypes.error) || antecedentSaveBlocked || revisionSystemsSaveBlocked || patientOptionsLoading || Boolean(patients.error) || !selectedPatient || !appointmentToFinalize()}>
                   Finalizar consulta
                 </button>
               )}
@@ -1398,6 +1486,11 @@ export function ClinicalRecordsPage({
                       <div key={item.id_cli_entries_antecedente}>{item.det_cli_antecedente} · {item.det_sub_antecedente}: {item.medida_cli_antecedente || '—'}</div>
                     ))}</dd></div>
                   )}
+                  {(entry.revision_sistemas ?? []).filter((item) => item.checked).length > 0 && (
+                    <div><dt>Revisión por sistemas</dt><dd>{(entry.revision_sistemas ?? []).filter((item) => item.checked).map((item) => (
+                      <div key={item.id_revision_sistema}>{item.det_revision_sistemas}: {item.medida_revision || '—'}</div>
+                    ))}</dd></div>
+                  )}
                   {[...new Set((entry.medidas ?? []).map((m) => m.general ?? 'Medidas'))].map((general) => (
                     <div key={general}>
                       <dt>{general}</dt>
@@ -1479,7 +1572,7 @@ function entryFields(
         </div>
       </div>
       <div className="field">
-        <label htmlFor={`${prefix}-exam`}>Revision x Sistemas</label>
+        <label htmlFor={`${prefix}-exam`}>Examen físico</label>
         <textarea id={`${prefix}-exam`} value={form.examen_fisico} onChange={(event) => update('examen_fisico', event.target.value)} maxLength={20000} rows={3} />
       </div>
       <div className="field">

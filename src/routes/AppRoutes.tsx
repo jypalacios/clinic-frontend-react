@@ -12,6 +12,7 @@ import { DiagnosesPage } from '../pages/admin/DiagnosesPage'
 import { ManagementPage } from '../pages/admin/ManagementPage'
 import { AnalysisPage } from '../pages/admin/AnalysisPage'
 import { AntecedentsPage } from '../pages/admin/AntecedentsPage'
+import { RevisionSystemsPage } from '../pages/admin/RevisionSystemsPage'
 import { PatientsPage } from '../pages/assistant/PatientsPage'
 import { AppointmentsPage } from '../pages/assistant/AppointmentsPage'
 import { IngresoPage } from '../pages/assistant/IngresoPage'
@@ -42,6 +43,7 @@ export function AppRoutes() {
             'roles.manage',
             'allergy_types.view',
             'allergies.view',
+            'revision_systems.view',
           ]} />}>
             <Route path="/admin/management" element={<ManagementPage />} />
           </Route>
@@ -50,6 +52,9 @@ export function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute permission="antecedents.view" />}>
             <Route path="/admin/antecedentes" element={<AntecedentsPage />} />
+          </Route>
+          <Route element={<ProtectedRoute permission="revision_systems.view" />}>
+            <Route path="/admin/revision-sistemas" element={<RevisionSystemsPage />} />
           </Route>
           <Route element={<ProtectedRoute permission="users.view" />}>
             <Route path="/admin/users" element={<UsersPage />} />

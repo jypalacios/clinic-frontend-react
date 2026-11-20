@@ -16,6 +16,12 @@ export function ManagementPage() {
       title: 'Análisis',
       text: 'Asocia detalles de historia clínica con tipos de cita.',
     },
+    hasPermission('revision_systems.view') && {
+      to: '/admin/revision-sistemas',
+      icon: '☷',
+      title: 'Revisión por sistemas',
+      text: 'Administra los ítems disponibles para la revisión por sistemas.',
+    },
     hasPermission('entities.view') && {
       to: '/assistant/entities',
       icon: '▣',
