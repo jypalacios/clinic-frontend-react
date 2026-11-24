@@ -121,14 +121,6 @@ interface CupOption {
   nombre: string
 }
 
-interface PatientCup {
-  id_cup_patient: number
-  id_cup: number
-  codigo: string
-  nombre: string
-  fec_creacion: string | null
-}
-
 interface EntryForm {
   motivo_consulta: string
   examen_fisico: string
@@ -290,37 +282,6 @@ export function ClinicalRecordsPage({
   const [selectedDiags, setSelectedDiags] = useState<DiagnosisOption[]>([])
   const cupIds = selectedCups.map((cup) => cup.id_cup)
   const diagIds = selectedDiags.map((diag) => diag.id_diag)
-  const patientCups = useResource<PatientCup[]>(
-    `/clinical-records/patients/${focusPatientId ?? 0}/cups`,
-    pageMode,
-  )
-  const patientCupsCard = pageMode ? (
-    <div className="panel patient-cups-card" aria-label="CUPS / Órdenes del paciente">
-      <div className="user-form-header">
-        <span className="eyebrow">CUPS / ÓRDENES</span>
-        <h2>CUPS asignados al paciente</h2>
-      </div>
-      {patientCups.loading ? (
-        <div className="notice" role="status">Consultando CUPS…</div>
-      ) : patientCups.error ? (
-        <div className="notice notice-error" role="alert">
-          <span>No se pudieron consultar los CUPS: {patientCups.error}</span>
-          <button type="button" className="text-button" onClick={patientCups.reload}>Reintentar</button>
-        </div>
-      ) : (patientCups.data ?? []).length === 0 ? (
-        <p>El paciente no tiene CUPS / órdenes registrados.</p>
-      ) : (
-        <ul className="clinical-entry-list">
-          {(patientCups.data ?? []).map((item) => (
-            <li className="clinical-entry" key={item.id_cup_patient}>
-              <strong>{item.codigo}</strong> · {item.nombre}
-              {item.fec_creacion ? ` — ${formatDate(item.fec_creacion)}` : ''}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  ) : null
 
   const headerPatient = selectedRecord?.patient ?? selectedPatient
   const headerDoctor = selectedRecord
@@ -685,7 +646,6 @@ export function ClinicalRecordsPage({
       setEntryForm(emptyEntry)
       setCreateOpen(false)
       resource.reload()
-      patientCups.reload()
     } catch (reason) {
       setPatientId('')
       setEntryForm(emptyEntry)
@@ -725,7 +685,6 @@ export function ClinicalRecordsPage({
         : 'Evolución agregada correctamente.')
       resetEntryForm()
       resource.reload()
-      patientCups.reload()
     } catch (reason) {
       setError(getErrorMessage(reason, 'No fue posible guardar la nota clínica.'))
       setSubmitting(false)
@@ -1048,11 +1007,6 @@ export function ClinicalRecordsPage({
             </button>
           </div>
           {patientHeaderCard}
-        </div>
-      )}
-      {pageMode && (
-        <div className="consult-state-summary">
-          {patientCupsCard}
           <div className="appointment-row">
           {appointmentLogoType?.logo && (
             <div className="panel appointment-logo-card" aria-label="Logo del tipo de cita">
@@ -1336,7 +1290,6 @@ export function ClinicalRecordsPage({
           aria-label={asModal ? `Nueva ${access.entityName}` : undefined}
         >
           {!pageMode && allergyBanner}
-          {!pageMode && patientCupsCard}
           <div className="user-form-header clinical-create-heading">
             <div>
               <span className="eyebrow">NUEVA {access.entityName.toLocaleUpperCase('es-CO')}</span>
@@ -1438,7 +1391,6 @@ export function ClinicalRecordsPage({
           aria-label={asModal ? `${access.entityName} de ${selectedPatientName}` : undefined}
         >
           {!pageMode && allergyBanner}
-          {!pageMode && patientCupsCard}
           {error && access.createInModal && <div className="notice notice-error" role="alert"><strong>Error.</strong><span>{error}</span></div>}
           <div className="user-form-header clinical-detail-heading">
             <div>

@@ -345,7 +345,7 @@ tbody tr:hover { background: #fbfcfe; }
   top: 72px;
   z-index: 2;
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 2fr) minmax(0, 1fr);
   gap: 16px;
   align-items: center;
   margin: -8px;
@@ -414,7 +414,6 @@ tbody tr:hover { background: #fbfcfe; }
 .consult-state .clinical-entry { padding: 14px 16px; line-height: 1.5; }
 .consult-state .clinical-entry-heading strong { font-weight: 600; }
 .consult-state .allergy-banner { margin-bottom: 0; }
-.consult-state-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .appointment-row { display: flex; gap: 16px; align-items: stretch; min-width: 0; }
 .appointment-row .appointment-type-card { flex: 1 1 0; min-width: 0; }
 .consult-state .appointment-logo-card { position: relative; flex: 0 0 clamp(72px, 28%, 120px); min-height: 72px; padding: 0; }
@@ -426,16 +425,12 @@ tbody tr:hover { background: #fbfcfe; }
 .consult-patient-facts dt { color: #77869a; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
 .consult-patient-facts dd { margin: 0; color: #2f425b; font-weight: 600; }
 
-.patient-cups-card .clinical-entry-list { margin: 0; padding: 0; list-style: none; }
-.patient-cups-card .clinical-entry { color: #46566b; }
-.patient-cups-card .clinical-entry strong { color: #2b4060; }
 
 @media (max-width: 720px) {
   .consult-state .panel { padding: 16px; }
 }
 @media (max-width: 760px) {
-  .consult-state-header { top: 59px; grid-template-columns: 1fr; gap: 10px; }
-  .consult-state-summary { grid-template-columns: 1fr; }
+  .consult-state-header { position: static; grid-template-columns: 1fr; gap: 10px; }
 }
 .allergy-modal-backdrop { z-index: 110; }
 .allergy-modal-dialog { max-width: 500px; max-height: calc(100vh - 64px); margin-top: 8vh; overflow-y: auto; }
