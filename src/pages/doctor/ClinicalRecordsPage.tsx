@@ -43,6 +43,7 @@ interface DoctorAppointment {
   fec_ingreso: string | null
   fec_dilatacion: string | null
   prioridad: boolean | null
+  first_time: boolean | null
 }
 
 interface AppointmentType {
@@ -56,6 +57,8 @@ interface ClinicalEntry {
   id_entries: number
   id_clinics: number
   id_doctors: number
+  id_appointment: number | null
+  id_tipo_appointment: number | null
   id_entries_rectifica: number | null
   fec_entrada: string
   motivo_consulta: string
@@ -226,7 +229,6 @@ export function ClinicalRecordsPage({
     && role === 'admin'
     && hasPermission(access.archivePermission)
   const resource = useResource<ClinicalRecord[]>('/clinical-records/')
-  const measureTypes = useResource<MeasureConfig>('/clinical-records/measure-config', canWrite)
   const revisionSystemTypes = useResource<RevisionSystemType[]>('/clinical-records/revision-sistemas', pageMode && canWrite)
   const patients = useResource<PatientOption[]>('/patients/', canCreate)
   const appointments = useResource<DoctorAppointment[]>(
@@ -561,8 +563,10 @@ export function ClinicalRecordsPage({
           }
         }),
       } : {}),
+      ...(measureAppointmentId ? {
+        id_appointment: measureAppointmentId,
+      } : {}),
       ...(pageMode && focusedAppointment ? {
-        id_appointment: focusedAppointment.id_appointments,
         antecedentes: (antecedentTypes.data ?? [])
           .filter((item) => antecedentes[item.id_sub_antecedente]?.checked)
           .map((item) => ({
@@ -590,6 +594,23 @@ export function ClinicalRecordsPage({
   }
 
   const focusedAppointment = pageMode && focusPatientId ? appointmentToFinalize(focusPatientId) : undefined
+  const routeAppointment = pageMode && focusPatientId && appointmentParam !== null
+    ? appointments.data?.find((item) =>
+      item.id_patients === focusPatientId && String(item.id_appointments) === appointmentParam)
+    : undefined
+  const entryPatientId = pageMode
+    ? focusPatientId
+    : modalOpen
+      ? Number(patientId)
+      : selectedRecord?.id_patients
+  const activeAppointment = entryPatientId ? appointmentToFinalize(entryPatientId) : undefined
+  const measureAppointmentId = correctionEntry?.id_appointment
+    ?? routeAppointment?.id_appointments
+    ?? activeAppointment?.id_appointments
+  const measureConfigPath = `/clinical-records/measure-config${measureAppointmentId
+    ? `?appointment_id=${encodeURIComponent(measureAppointmentId)}`
+    : ''}`
+  const measureTypes = useResource<MeasureConfig>(measureConfigPath, canWrite)
   const antecedentTypes = useResource<AntecedentType[]>(
     `/clinical-records/appointments/${focusedAppointment?.id_appointments ?? 0}/antecedents`,
     pageMode && Boolean(focusedAppointment),
@@ -872,14 +893,18 @@ export function ClinicalRecordsPage({
   }
 
   function measureSelector(prefix: string): ReactNode {
-    if (measureTypes.loading) return <div className="notice" role="status">Consultando medidas de la especialidad…</div>
+    if (measureTypes.loading) return <div className="notice" role="status">Consultando análisis de la cita…</div>
     if (measureTypes.error) return (
       <div className="notice notice-error" role="alert">
-        <span>No se pudieron consultar las medidas de la especialidad: {measureTypes.error}</span>
+        <span>No se pudieron consultar los análisis: {measureTypes.error}</span>
         <button type="button" className="text-button" onClick={measureTypes.reload}>Reintentar</button>
       </div>
     )
-    if (!measureTypes.data?.types.length) return <p>No hay medidas configuradas para su especialidad.</p>
+    if (!measureTypes.data?.types.length) return (
+      <p>{measureAppointmentId
+        ? 'No hay análisis configurados para el tipo de cita seleccionado.'
+        : 'No hay medidas configuradas para su especialidad.'}</p>
+    )
     const usesDetail = measureTypes.data.mode === 'detalle'
     const groups = new Map<string, MeasureType[]>()
     for (const item of measureTypes.data.types) {
@@ -1033,19 +1058,23 @@ export function ClinicalRecordsPage({
             ) : (() => {
               const appointment = appointmentToFinalize(focusPatientId)
               if (!appointment) return <p>El paciente no tiene citas programadas.</p>
-              if (appointment.tipo_appointment == null) return <p>La cita no tiene un tipo registrado.</p>
-              if (appointmentTypes.loading) return <div className="notice" role="status">Consultando el tipo de cita…</div>
-              if (appointmentTypes.error) return (
-                <div className="notice notice-error" role="alert">
-                  <span>No se pudo consultar el tipo de cita: {appointmentTypes.error}</span>
-                  <button type="button" className="text-button" onClick={appointmentTypes.reload}>Reintentar</button>
-                </div>
-              )
               const type = appointmentTypes.data?.find((item) => item.id_tipo_appointment === appointment.tipo_appointment)
               return (
                 <>
-                  <p>{type?.nom_tipo_appointment ?? `Tipo de cita #${appointment.tipo_appointment} no encontrado.`}</p>
+                  {appointment.tipo_appointment == null ? (
+                    <p>La cita no tiene un tipo registrado.</p>
+                  ) : appointmentTypes.loading ? (
+                    <div className="notice" role="status">Consultando el tipo de cita…</div>
+                  ) : appointmentTypes.error ? (
+                    <div className="notice notice-error" role="alert">
+                      <span>No se pudo consultar el tipo de cita: {appointmentTypes.error}</span>
+                      <button type="button" className="text-button" onClick={appointmentTypes.reload}>Reintentar</button>
+                    </div>
+                  ) : (
+                    <p>{type?.nom_tipo_appointment ?? `Tipo de cita #${appointment.tipo_appointment} no encontrado.`}</p>
+                  )}
                   <p className="muted">Cita #{appointment.id_appointments} · {formatDate(appointment.fecha_hora)}</p>
+                  <p><strong>Tipo Consulta:</strong> {appointment.first_time === true ? 'Primera Vez' : appointment.first_time === false ? 'Seguimiento' : 'No registrado'}</p>
                 </>
               )
             })()}

@@ -34,7 +34,9 @@ Este backend permite:
 
 ## Frontend
 
-Desde Management, Análisis permite seleccionar un tipo de cita y asociarle detalles de historia clínica. La consulta requiere `analysis.view` y la creación o edición requiere `analysis.manage`.
+Al crear una cita se puede marcar «Primera vez»; el listado muestra también las citas cuyo valor aún no fue registrado.
+
+Desde Management, Análisis permite seleccionar un tipo de cita y un grupo de historia clínica para consultar sus asociaciones en una tabla. Para crear o editar una asociación se selecciona un detalle del grupo; durante la edición también se puede cambiar el tipo y el grupo. El botón «Nuevo detalle» abre un formulario para crear un detalle y asociarlo al tipo de cita seleccionado. La consulta requiere `analysis.view` y la creación o edición requiere `analysis.manage`.
 
 Desde Management, Antecedentes permite consultar y administrar subantecedentes por categoría y especialidad. La tabla permite filtrar por antecedente y especialidad. Requiere `antecedents.view` para consultar y `antecedents.manage` para crear o editar.
 

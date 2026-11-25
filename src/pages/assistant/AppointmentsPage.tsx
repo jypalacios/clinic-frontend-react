@@ -11,6 +11,7 @@ interface AppointmentRecord {
   tipo_appointment: number | null
   fecha_hora: string
   nom_estado: string
+  first_time: boolean | null
 }
 
 interface AppointmentTypeOption {
@@ -40,9 +41,10 @@ interface AppointmentForm {
   tipo_appointment: string
   fecha_hora: string
   estado: string
+  first_time: boolean
 }
 
-const emptyForm: AppointmentForm = { id_patients: '', id_doctors: '', tipo_appointment: '', fecha_hora: '', estado: '' }
+const emptyForm: AppointmentForm = { id_patients: '', id_doctors: '', tipo_appointment: '', fecha_hora: '', estado: '', first_time: false }
 
 function appointmentFromRow(row: Record<string, unknown>): AppointmentRecord | null {
   const id_appointments = Number(row.id_appointments)
@@ -64,6 +66,7 @@ function appointmentFromRow(row: Record<string, unknown>): AppointmentRecord | n
     tipo_appointment,
     fecha_hora: row.fecha_hora,
     nom_estado: row.nom_estado,
+    first_time: typeof row.first_time === 'boolean' ? row.first_time : null,
   }
 }
 
@@ -153,6 +156,7 @@ export function AppointmentsPage() {
       tipo_appointment: appointment.tipo_appointment == null ? '' : String(appointment.tipo_appointment),
       fecha_hora: toLocalInputValue(appointment.fecha_hora),
       estado: appointment.nom_estado,
+      first_time: appointment.first_time === true,
     })
     setEditing(appointment)
     setError(null)
@@ -160,7 +164,7 @@ export function AppointmentsPage() {
     setFormOpen(true)
   }
 
-  function updateField(field: keyof AppointmentForm, value: string) {
+  function updateField<K extends keyof AppointmentForm>(field: K, value: AppointmentForm[K]) {
     setForm((current) => ({ ...current, [field]: value }))
     setError(null)
     setFeedback(null)
@@ -186,6 +190,7 @@ export function AppointmentsPage() {
           id_doctors: Number(form.id_doctors),
           tipo_appointment: Number(form.tipo_appointment),
           fecha_hora,
+          first_time: form.first_time,
         }
       await apiRequest<AppointmentRecord>(endpoint, {
         method: editing ? 'PUT' : 'POST',
@@ -253,6 +258,7 @@ export function AppointmentsPage() {
           { key: 'id_patients', label: 'Paciente', render: (value) => patientNames.get(Number(value)) ?? `Paciente #${String(value ?? '')}` },
           { key: 'id_doctors', label: 'Médico', render: (value) => doctorNames.get(Number(value)) ?? `Médico #${String(value ?? '')}` },
           { key: 'tipo_appointment', label: 'Tipo de cita', render: (value) => appointmentTypeNames.get(Number(value)) ?? '—' },
+          { key: 'first_time', label: 'Primera vez', render: (value) => value === true ? 'Sí' : value === false ? 'No' : '—' },
           { key: 'nom_estado', label: 'Estado' },
           { key: 'discapacidad', label: 'Discapacidad', render: (value) => value === true ? 'Sí' : 'No' },
         ]}
@@ -383,6 +389,19 @@ export function AppointmentsPage() {
                   required
                 />
               </div>
+              {!editing && (
+                <div className="field">
+                  <label htmlFor="appointment-first-time" className="appointment-checkbox">
+                    <input
+                      id="appointment-first-time"
+                      type="checkbox"
+                      checked={form.first_time}
+                      onChange={(event) => updateField('first_time', event.target.checked)}
+                    />
+                    Primera vez
+                  </label>
+                </div>
+              )}
               {editing && (
                 <div className="field">
                   <label htmlFor="appointment-state">Estado</label>

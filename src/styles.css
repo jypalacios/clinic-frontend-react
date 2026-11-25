@@ -173,6 +173,8 @@ tbody tr:hover { background: #fbfcfe; }
 .field { display: grid; gap: 7px; }
 .field label { color: #4a5970; font-size: 11px; font-weight: 600; }
 .field input, .field select { width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid #e3e9ef; border-radius: 7px; outline: 0; color: #33465d; background: #fff; font-size: 11px; transition: .18s; }
+.field .appointment-checkbox { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.field .appointment-checkbox input { width: auto; min-height: 0; padding: 0; }
 .field input:focus, .field select:focus { border-color: #6b9acb; box-shadow: 0 0 0 3px #5289c31a; }
 .field input[aria-invalid='true'], .field select[aria-invalid='true'] { border-color: #d87a7a; box-shadow: 0 0 0 3px rgba(216, 122, 122, 0.12); }
 .field small { color: #b24949; font-size: 10px; }
