@@ -42,6 +42,8 @@ Desde Management, Antecedentes permite consultar y administrar subantecedentes p
 
 En la página de consulta, la tarjeta Antecedentes muestra los conceptos de la especialidad de la cita seleccionada. Marcar un concepto habilita su valor; los datos se guardan junto con la nota. Una rectificación conserva la nota y los antecedentes originales.
 
+En la página de estado de consulta, los análisis de agudeza visual lejana con y sin corrección ofrecen valores seleccionables para cada ojo. Los valores anteriores fuera de la lista permanecen visibles y se conservan hasta que se cambien.
+
 La aplicación web de este proyecto está en la raíz `clinica_frontend/` y utiliza React, TypeScript y Vite. Para iniciar el entorno local desde esa raíz:
 
 ```bash

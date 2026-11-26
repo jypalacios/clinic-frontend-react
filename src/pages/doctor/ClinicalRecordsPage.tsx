@@ -149,6 +149,17 @@ interface MeasureConfig {
   types: MeasureType[]
 }
 
+const VISUAL_ACUITY_OPTIONS = [
+  '20/20', '20/25', '20/30', '20/40', '20/50', '20/60', '20/80',
+  '20/100', '20/200', '20/400', 'CD', 'MM', 'PL', 'NPL',
+]
+
+function isDistanceVisualAcuity(item: MeasureType): boolean {
+  const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase()
+  return normalize(item.general) === 'agudeza visual'
+    && ['lejana con correccion', 'lejana sin correccion'].includes(normalize(item.detalle))
+}
+
 const emptyEntry: EntryForm = {
   motivo_consulta: '',
   examen_fisico: '',
@@ -922,6 +933,22 @@ export function ClinicalRecordsPage({
               <tbody>
                 {items.map((item) => {
                   const value = entryForm.medidas[item.id_hc_detalle]
+                  const useVisualAcuityOptions = pageMode && !usesDetail && isDistanceVisualAcuity(item)
+                  const eyeField = (field: 'derecho' | 'izquierdo', suffix: string) => {
+                    const currentValue = value?.[field] ?? ''
+                    const label = `${item.detalle} ojo ${field}`
+                    const id = `${prefix}-${suffix}-${item.id_hc_detalle}`
+                    if (!useVisualAcuityOptions) {
+                      return <input aria-label={label} id={id} maxLength={20} value={currentValue} onChange={(event) => updateMeasure(item.id_hc_detalle, field, event.target.value)} />
+                    }
+                    return (
+                      <select aria-label={label} id={id} value={currentValue} onChange={(event) => updateMeasure(item.id_hc_detalle, field, event.target.value)}>
+                        <option value="">Seleccione</option>
+                        {currentValue && !VISUAL_ACUITY_OPTIONS.includes(currentValue) && <option value={currentValue}>{currentValue} (valor anterior)</option>}
+                        {VISUAL_ACUITY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    )
+                  }
                   return (
                     <tr key={item.id_hc_detalle}>
                       <td>{item.detalle}</td>
@@ -929,8 +956,8 @@ export function ClinicalRecordsPage({
                         <td><textarea aria-label={`${item.detalle} detalle`} id={`${prefix}-detalle-${item.id_hc_detalle}`} maxLength={255} rows={3} value={value?.detalle ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'detalle', event.target.value)} /></td>
                       ) : (
                         <>
-                          <td><input aria-label={`${item.detalle} ojo derecho`} id={`${prefix}-od-${item.id_hc_detalle}`} maxLength={20} value={value?.derecho ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'derecho', event.target.value)} /></td>
-                          <td><input aria-label={`${item.detalle} ojo izquierdo`} id={`${prefix}-oi-${item.id_hc_detalle}`} maxLength={20} value={value?.izquierdo ?? ''} onChange={(event) => updateMeasure(item.id_hc_detalle, 'izquierdo', event.target.value)} /></td>
+                          <td>{eyeField('derecho', 'od')}</td>
+                          <td>{eyeField('izquierdo', 'oi')}</td>
                         </>
                       )}
                     </tr>
