@@ -127,10 +127,12 @@ clinica_backend/
 ## Principales módulos de negocio
 
 ### Autenticación
-- login con email y contraseña
+- login con nombre de usuario y contraseña
 - generación de token JWT
 - validación del usuario autenticado
 - control de acceso por rol
+
+Desde el inicio de sesión, «¿Olvidaste tu contraseña?» permite solicitar una contraseña temporal al correo registrado y establecer una nueva contraseña. La clave temporal vence en 15 minutos y no permite acceder directamente. La recuperación requiere configurar SMTP y ejecutar la migración correspondiente en el backend.
 
 ### Usuarios
 - registro de usuarios desde la sección Usuarios para los roles autorizados

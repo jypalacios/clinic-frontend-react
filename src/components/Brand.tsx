@@ -6,7 +6,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
       <span className="brand-mark" aria-hidden="true">
         <img src={logo} alt="" />
       </span>
-      {!compact && <span>Diana<span className="brand-light">Libreros</span></span>}
+      {!compact && <span>Gestion<span className="brand-light">Clinica</span></span>}
     </div>
   )
 }

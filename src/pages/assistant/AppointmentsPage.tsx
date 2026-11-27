@@ -113,13 +113,24 @@ export function AppointmentsPage() {
     }),
   }
   const [form, setForm] = useState<AppointmentForm>(emptyForm)
+  const [patientQuery, setPatientQuery] = useState('')
   const [editing, setEditing] = useState<AppointmentRecord | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [patientHistoryStatus, setPatientHistoryStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const [patientHistoryError, setPatientHistoryError] = useState<string | null>(null)
+  const [patientHistoryRetry, setPatientHistoryRetry] = useState(0)
 
   const activePatients = (patients.data ?? []).filter((patient) => patient.activo === 0 || patient.activo === true)
+  const patientSearchResults = patientQuery.trim()
+    ? activePatients.filter((patient) =>
+      `${patient.nom_patients} ${patient.ape_patients} ${patient.ced_patients}`
+        .toLocaleLowerCase()
+        .includes(patientQuery.trim().toLocaleLowerCase()),
+    ).slice(0, 20)
+    : []
   const activeDoctors = (doctors.data ?? []).filter((doctor) => doctor.activo)
   const patientNames = new Map(activePatients.map((patient) => [
     patient.id_patients,
@@ -136,6 +147,7 @@ export function AppointmentsPage() {
 
   function closeForm() {
     setForm(emptyForm)
+    setPatientQuery('')
     setEditing(null)
     setFormOpen(false)
     setError(null)
@@ -143,6 +155,7 @@ export function AppointmentsPage() {
 
   function startCreate() {
     setForm(emptyForm)
+    setPatientQuery('')
     setEditing(null)
     setError(null)
     setFeedback(null)
@@ -150,6 +163,7 @@ export function AppointmentsPage() {
   }
 
   function startEdit(appointment: AppointmentRecord) {
+    setPatientQuery('')
     setForm({
       id_patients: String(appointment.id_patients),
       id_doctors: String(appointment.id_doctors),
@@ -172,6 +186,12 @@ export function AppointmentsPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!editing && (!form.id_patients || patientHistoryStatus !== 'ready')) {
+      setError(!form.id_patients
+        ? 'Seleccione un paciente de los resultados de búsqueda.'
+        : 'Espere a que se verifique la historia clínica del paciente.')
+      return
+    }
     setSubmitting(true)
     setError(null)
     setFeedback(null)
@@ -208,6 +228,39 @@ export function AppointmentsPage() {
 
   const catalogError = patients.error || doctors.error || types.error
   const catalogLoading = patients.loading || doctors.loading || types.loading
+
+  useEffect(() => {
+    if (editing || !form.id_patients) {
+      setPatientHistoryStatus('idle')
+      setPatientHistoryError(null)
+      return
+    }
+
+    let cancelled = false
+    const patientId = form.id_patients
+    setPatientHistoryStatus('loading')
+    setPatientHistoryError(null)
+    apiRequest<{ has_entries: boolean }>(`/clinical-records/patients/${patientId}/has-entries`)
+      .then((history) => {
+        if (typeof history?.has_entries !== 'boolean') {
+          throw new Error('La respuesta de historia clínica no es válida.')
+        }
+        if (cancelled) return
+        setForm((current) => current.id_patients === patientId
+          ? { ...current, first_time: !history.has_entries }
+          : current)
+        setError(null)
+        setPatientHistoryStatus('ready')
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return
+        setPatientHistoryStatus('error')
+        setPatientHistoryError(reason instanceof Error ? reason.message : 'No se pudo verificar la historia clínica.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [editing, form.id_patients, patientHistoryRetry])
 
   useEffect(() => {
     if (!formOpen) return
@@ -314,20 +367,49 @@ export function AppointmentsPage() {
               {!editing && (
                 <div className="field">
                   <label htmlFor="appointment-patient">Paciente</label>
-                  <select
+                  <div className="search-picker">
+                  <input
                     id="appointment-patient"
-                    value={form.id_patients}
-                    onChange={(event) => updateField('id_patients', event.target.value)}
+                    type="search"
+                    autoComplete="off"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-controls="appointment-patient-results"
+                    aria-expanded={!form.id_patients && patientQuery.trim().length > 0}
+                    value={patientQuery}
+                    placeholder="Buscar por nombre, apellido o documento"
+                    onChange={(event) => {
+                      setPatientQuery(event.target.value)
+                      updateField('id_patients', '')
+                    }}
                     required
                     disabled={catalogLoading || Boolean(catalogError) || !activePatients.length}
-                  >
-                    <option value="">Seleccione un paciente</option>
-                    {activePatients.map((patient) => (
-                      <option key={patient.id_patients} value={patient.id_patients}>
-                        {patient.nom_patients} {patient.ape_patients} — {patient.ced_patients}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                  {!form.id_patients && patientQuery.trim() && (
+                    <ul id="appointment-patient-results" className="search-results" role="listbox" aria-label="Resultados de pacientes">
+                      {patientSearchResults.length ? patientSearchResults.map((patient) => (
+                        <li key={patient.id_patients} role="option" aria-selected={false}>
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() => {
+                              updateField('id_patients', String(patient.id_patients))
+                              updateField('first_time', false)
+                              setPatientHistoryStatus('loading')
+                              setPatientHistoryError(null)
+                              setPatientQuery(`${patient.nom_patients} ${patient.ape_patients} — ${patient.ced_patients}`)
+                            }}
+                          >
+                            <b>{patient.nom_patients} {patient.ape_patients}</b> — {patient.ced_patients}
+                          </button>
+                        </li>
+                      )) : (
+                        <li className="cup-selected-empty">No se encontraron pacientes.</li>
+                      )}
+                    </ul>
+                  )}
+                  </div>
+                  <small>Escriba para buscar y seleccione un paciente de los resultados.</small>
                 </div>
               )}
               {editing && (
@@ -397,9 +479,21 @@ export function AppointmentsPage() {
                       type="checkbox"
                       checked={form.first_time}
                       onChange={(event) => updateField('first_time', event.target.checked)}
+                      disabled={patientHistoryStatus !== 'ready'}
                     />
                     Primera vez
                   </label>
+                  {form.id_patients && patientHistoryStatus === 'loading' && (
+                    <small>Verificando si tiene entradas en su historia clínica…</small>
+                  )}
+                  {patientHistoryError && (
+                    <div className="notice notice-error" role="alert">
+                      <span>No se pudo verificar la historia clínica: {patientHistoryError}</span>
+                      <button className="text-button" type="button" onClick={() => setPatientHistoryRetry((value) => value + 1)}>
+                        Reintentar
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
               {editing && (
@@ -426,7 +520,7 @@ export function AppointmentsPage() {
               <button
                 className="button button-primary"
                 type="submit"
-                disabled={submitting || catalogLoading || Boolean(catalogError) || !types.data?.length || !activeDoctors.length || (!editing && !activePatients.length)}
+                disabled={submitting || catalogLoading || Boolean(catalogError) || !types.data?.length || !activeDoctors.length || (!editing && (!activePatients.length || !form.id_patients || patientHistoryStatus !== 'ready'))}
               >
                 {submitting ? 'Guardando…' : editing ? 'Guardar cambios' : 'Crear cita'}
               </button>

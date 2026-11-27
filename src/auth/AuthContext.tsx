@@ -25,7 +25,7 @@ interface AuthContextValue {
   hasAnyPermission: (permissions: string[]) => boolean
   loading: boolean
   authError: string | null
-  login: (email: string, password: string) => Promise<void>
+  login: (usuario: string, password: string) => Promise<void>
   logout: () => void
 }
 
@@ -87,10 +87,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (usuario: string, password: string) => {
     const result = await apiRequest<LoginResponse>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ usuario, password }),
     })
     const token = result.access_token ?? result.token
     if (!token) throw new Error('La respuesta de autenticación no contiene un token de acceso.')

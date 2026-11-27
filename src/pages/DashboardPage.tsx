@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { useResource } from '../api/hooks'
 import { StatCard } from '../components/StatCard'
+import welcomeLogo from './images/logogch.jpeg'
 
 function countRecords(value: unknown): number | null {
   if (Array.isArray(value)) return value.length
@@ -148,7 +149,7 @@ export function DashboardPage() {
           <h1>Hola, {name} <span aria-hidden="true">✦</span></h1>
           <p>Este es el resumen de actividad de tu espacio clínico.</p>
         </div>
-        <div className="welcome-art" aria-hidden="true"><span>✚</span><i /><b /></div>
+        <img className="welcome-art" src={welcomeLogo} alt="GCHAPP" />
       </div>
       <div className="section-heading">
         <div><h2>Resumen general</h2><p>Una vista rápida de la operación de tu clínica.</p></div>

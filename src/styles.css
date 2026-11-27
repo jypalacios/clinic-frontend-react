@@ -27,7 +27,8 @@ h1, h2, p { margin-top: 0; }
   width: 250px; padding: 28px 17px 20px; color: #fff; background: #193b66;
 }
 .brand { display: flex; align-items: center; gap: 10px; font-family: Manrope, sans-serif; font-weight: 800; font-size: 20px; letter-spacing: -.7px; }
-.brand-mark { display: grid; width: 34px; height: 34px; place-items: center; color: #80dfc4; }
+.sidebar .brand { flex-direction: column; }
+.brand-mark { display: grid; width: 100px; height: 34px; place-items: center; color: #80dfc4; flex-shrink: 0; }
 .brand-mark svg { width: 100%; height: 100%; }
 .brand-mark img { width: 100%; height: 100%; object-fit: contain; }
 .brand-light { color: #80dfc4; font-weight: 500; }
@@ -196,13 +197,8 @@ tbody tr:hover { background: #fbfcfe; }
 .welcome-banner h1 { color: #fff; font-size: 25px; }
 .welcome-banner h1 span { color: #8fe1c7; font-size: 18px; }
 .welcome-banner p { margin: 0; color: #d0dceb; font-size: 11px; }
-.welcome-art { position: absolute; top: -62px; right: 80px; display: grid; width: 250px; height: 250px; place-items: center; border: 1px solid #ffffff19; border-radius: 50%; background: #ffffff09; }
-.welcome-art::before, .welcome-art::after { position: absolute; width: 175px; height: 175px; border: 1px solid #ffffff24; border-radius: 50%; content: ''; }
-.welcome-art::after { width: 115px; height: 115px; }
-.welcome-art span { z-index: 1; display: grid; width: 53px; height: 53px; place-items: center; border-radius: 16px; color: #193b66; background: #95e3ce; box-shadow: 0 10px 30px #102f4d55; font-size: 27px; }
-.welcome-art i, .welcome-art b { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #95e3ce; }
-.welcome-art i { top: 55px; right: 44px; }
-.welcome-art b { bottom: 47px; left: 52px; width: 7px; height: 7px; background: #ffd18e; }
+.welcome-banner > div { min-width: 0; }
+.welcome-art { flex: 0 0 auto; width: 190px; max-width: 35%; max-height: 130px; margin-left: 16px; border-radius: 8px; object-fit: contain; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; margin: 30px 0 15px; }
 .section-heading h2, .panel-heading h2 { margin-bottom: 4px; color: #304157; font-family: Manrope, sans-serif; font-size: 15px; font-weight: 700; }
 .section-heading p, .panel-heading p { margin-bottom: 0; font-size: 10px; }
@@ -300,7 +296,6 @@ tbody tr:hover { background: #fbfcfe; }
   .user-info { display: none; }
   .content-area { padding: 23px 16px 35px; }
   .dashboard-columns { grid-template-columns: 1fr; }
-  .welcome-art { right: -90px; opacity: .5; }
   .page-heading { gap: 10px; align-items: flex-start; }
   .page-heading h1 { font-size: 23px; }
   .page-heading-actions { flex: 0 0 auto; }
@@ -318,7 +313,6 @@ tbody tr:hover { background: #fbfcfe; }
   .welcome-banner { min-height: 155px; padding: 23px 20px; }
   .welcome-banner h1 { max-width: 225px; font-size: 21px; }
   .welcome-banner p { max-width: 230px; line-height: 1.6; }
-  .welcome-art { right: -145px; }
   .table-toolbar { gap: 10px; padding: 12px; }
   .table-pagination { align-items: flex-start; flex-direction: column; padding: 12px; }
   .table-pagination > div { width: 100%; justify-content: space-between; gap: 8px; }
@@ -422,7 +416,7 @@ tbody tr:hover { background: #fbfcfe; }
 .appointment-logo-card img { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); object-fit: contain; object-position: center; }
 
 .consult-patient-card h1 { margin: 0 0 14px; color: #2b4060; font-family: Manrope, sans-serif; line-height: 1.25; }
-.consult-patient-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px 22px; margin: 0; }
+.consult-patient-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px 22px; margin: 0; }
 .consult-patient-facts > div { display: grid; gap: 3px; padding-left: 12px; border-left: 3px solid #cfe0f3; }
 .consult-patient-facts dt { color: #77869a; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
 .consult-patient-facts dd { margin: 0; color: #2f425b; font-weight: 600; }
